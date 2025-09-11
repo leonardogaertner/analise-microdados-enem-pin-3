@@ -6,7 +6,10 @@ O projeto tem como objetivo explorar e interpretar os dados, gerando estatístic
 ## 🛠️ Tecnologias  
 
 - Python
-- Etc
+- Streamlit
 
 ## ⚙️ Execução
-- Desenvolver
+- Para instalar as dependências, execute o comando `pip install -r requirements.txt`;
+- Para iniciar a aplicação, execute `streamlit run app.py`;
+
+Observação: ao utilizar novas dependências, execute o comando `pip freeze > requirements.txt` para realizar a sincronização das versões corretas.
