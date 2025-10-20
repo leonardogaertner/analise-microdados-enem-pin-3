@@ -13,10 +13,10 @@ import re
 
 # --- Configuração do Banco de Dados PostgreSQL ---
 DB_USER = os.environ.get('DB_USER', 'postgres')
-DB_PASS = os.environ.get('DB_PASS', 'aluno')
+DB_PASS = os.environ.get('DB_PASS', 'admin')
 DB_HOST = os.environ.get('DB_HOST', '127.0.0.1')
 DB_NAME = os.environ.get('DB_NAME', 'microdados')
-DATABASE_URL = f"postgresql+psycopg://{DB_USER}:{DB_PASS}@{DB_HOST}:5432/{DB_NAME}"
+DATABASE_URL = f"postgresql+psycopg://{DB_USER}:{DB_PASS}@{DB_HOST}:5433/{DB_NAME}"
 
 # --- Configurações dos Campos e Arquivos ---
 campos_str = (
