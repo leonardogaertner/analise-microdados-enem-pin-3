@@ -1,8 +1,13 @@
-# -*- coding: utf-8 -*-
-
 import pandas as pd
 from sqlalchemy import create_engine, text, types
 import unicodedata
+try:
+    import psycopg
+except Exception as _e:
+    raise ImportError("The 'psycopg' package is required by SQLAlchemy for the 'psycopg' dialect.\n"
+                      "Install it for this Python interpreter (example):\n"
+                      "  python -m pip install psycopg[binary] --upgrade\n"
+                      "Then re-run the script with the same python executable that installed the package.")
 import time
 import glob
 from io import StringIO
@@ -13,10 +18,10 @@ import re
 
 # --- Configuração do Banco de Dados PostgreSQL ---
 DB_USER = os.environ.get('DB_USER', 'postgres')
-DB_PASS = os.environ.get('DB_PASS', 'admin')
+DB_PASS = os.environ.get('DB_PASS', '123')
 DB_HOST = os.environ.get('DB_HOST', '127.0.0.1')
 DB_NAME = os.environ.get('DB_NAME', 'microdados')
-DATABASE_URL = f"postgresql+psycopg://{DB_USER}:{DB_PASS}@{DB_HOST}:5433/{DB_NAME}"
+DATABASE_URL = f"postgresql+psycopg://{DB_USER}:{DB_PASS}@{DB_HOST}:5432/{DB_NAME}"
 
 # --- Configurações dos Campos e Arquivos ---
 campos_str = (
