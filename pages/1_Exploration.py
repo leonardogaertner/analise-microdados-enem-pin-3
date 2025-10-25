@@ -3,6 +3,7 @@ import os
 import pandas as pd
 from sqlalchemy import create_engine
 import numpy as np
+from fpdf import FPDF
 
 st.markdown("""
     <style>
@@ -33,19 +34,20 @@ st.info("Aqui você pode explorar os microdados do ENEM com tabelas, filtros, cr
 
 # Configurações do banco
 DB_HOST = os.environ.get('DB_HOST', '127.0.0.1')
-DB_PORT = os.environ.get('DB_PORT', '5432')
+DB_PORT = os.environ.get('DB_PORT', '5433')
 DB_NAME = os.environ.get('DB_NAME', 'microdados')
 DB_USER = os.environ.get('DB_USER', 'postgres')
-DB_PASS = os.environ.get('DB_PASS', 'aluno')
+DB_PASS = os.environ.get('DB_PASS', 'admin')
 
 # Conexão com o banco
 @st.cache_resource
 def get_engine():
     return create_engine(f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
 
-PAGE_SIZE = 100
 if 'page' not in st.session_state:
     st.session_state.page = 1
+if 'page_size' not in st.session_state:
+    st.session_state.page_size = 100
 
 def change_page(delta):
     st.session_state.page = max(1, st.session_state.page + delta)
@@ -53,9 +55,48 @@ def change_page(delta):
 @st.cache_data(ttl=3600)
 def load_paginated_data(table_name, page, page_size):
     engine = get_engine()
-    offset = (page - 1) * page_size
-    query = f"SELECT * FROM {table_name} LIMIT {page_size} OFFSET {offset};"
+    
+    if page_size == "Todos":
+        query = f"SELECT * FROM {table_name};"
+    else:
+        offset = (page - 1) * page_size
+        query = f"SELECT * FROM {table_name} LIMIT {page_size} OFFSET {offset};"
+        
     return pd.read_sql(query, engine)
+
+# Função para criar o PDF (.csv segue fazendo infinitamente mais sentido)
+def dataframe_to_pdf_bytes(df: pd.DataFrame) -> bytes:
+    """
+    Converte um DataFrame do Pandas em bytes de um PDF.
+    A tabela será em modo paisagem para caber mais colunas.
+    """
+    pdf = FPDF(orientation="L", unit="mm", format="A4")
+    pdf.add_page()
+    
+    pdf.set_font("Arial", size=8) 
+    
+    df_str = df.fillna('N/A').astype(str)
+    
+    # Calcula larguras de coluna (distribuição igual)
+    num_cols = len(df_str.columns)
+    page_width = pdf.w - 2 * pdf.l_margin
+    col_width = page_width / num_cols
+    line_height = pdf.font_size * 2
+
+    # Renderiza o Cabeçalho
+    pdf.set_font(family=pdf.font_family, style="B", size=pdf.font_size)
+    for col in df_str.columns:
+        pdf.cell(col_width, line_height, col, border=1, align='C') 
+    pdf.ln(line_height)
+    pdf.set_font(family=pdf.font_family, style="", size=pdf.font_size) 
+
+    for _, row in df_str.iterrows():
+        for col in df_str.columns:
+            pdf.cell(col_width, line_height, row[col], border=1, align='L')
+        pdf.ln(line_height)
+
+    return pdf.output(dest='S').encode('latin-1')
+
 
 # Função dos filtros
 def filter_dataframe(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
@@ -63,7 +104,6 @@ def filter_dataframe(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
 
     col_toggle, col_clear = st.columns([1, 3])
 
-    # Estado do filtro
     if "filters_active" not in st.session_state:
         st.session_state.filters_active = False
 
@@ -76,7 +116,6 @@ def filter_dataframe(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
 
     # Botão limpar filtros
     if col_clear.button("🔁 Limpar filtros", key=f"clear_filters_{table_name}_{st.session_state.page}"):
-        # Limpa todos os filtros selecionados
         for key in list(st.session_state.keys()):
             if key.startswith(f"{table_name}_") or key.startswith(f"filter_"):
                 del st.session_state[key]
@@ -103,15 +142,14 @@ def filter_dataframe(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
         col1, col2 = st.columns((0.01, 4))
         key_prefix = f"{table_name}_{column}_{st.session_state.page}"
 
-        # Ignora colunas vazias, se não da erro no streamlit
         if df[column].dropna().empty:
             col2.info(f"⚠️ Coluna '{column}' sem valores disponíveis para filtragem.")
             continue
 
         # Numéricos
         if pd.api.types.is_numeric_dtype(df[column]):
-            _min = float(df[column].min())
-            _max = float(df[column].max())
+            _min = int(np.floor(df[column].min()))
+            _max = int(np.ceil(df[column].max()))
 
             if _min == _max:
                 col2.info(f"ℹ️ Coluna '{column}' contém apenas um valor ({_min}).")
@@ -158,78 +196,124 @@ def filter_dataframe(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
         # Caso tenha algum tipo de dado não tratado, cai nessa validação aqui
         else:
             col2.warning(f"Tipo de dado da coluna '{column}' não é suportado para filtragem.")
-   
+    
     return df
 
 TABLE_NAME = "dados_enem_consolidado"
 
 try:
-    # Carregar total de linhas no bd
     with st.spinner("Carregando total de registros..."):
         count_query = f"SELECT COUNT(*) FROM {TABLE_NAME};"
         total_rows = pd.read_sql(count_query, get_engine()).iloc[0, 0]
         st.session_state.total_rows = total_rows
 
-    # Carregar dados da página atual
-    df = load_paginated_data(TABLE_NAME, st.session_state.page, PAGE_SIZE)
+    df = load_paginated_data(TABLE_NAME, st.session_state.page, st.session_state.page_size)
 
     if df.empty:
         st.warning("Nenhum dado encontrado nesta página.")
     else:
-        # Aplicar filtros
         df_filtered = filter_dataframe(df, TABLE_NAME)
 
-        total_cols = len(df_filtered.columns)
-        start_row = (st.session_state.page - 1) * PAGE_SIZE + 1
-        end_row = start_row + len(df_filtered) - 1
-        st.success(f"Página {st.session_state.page} | Linhas {start_row:,}–{end_row:,} | {total_cols} colunas")
-
-        # Exibir tabela filtrada
         st.dataframe(df_filtered, use_container_width=True, hide_index=True)
+        
+        # Paginação
+        
+        if st.session_state.page_size == "Todos":
+            total_pages = 1
+        else:
+            total_pages = (st.session_state.total_rows + st.session_state.page_size - 1) // st.session_state.page_size
+            
+        show_pagination_controls = st.session_state.page_size != "Todos"
+        
+        if show_pagination_controls:
+            st.markdown(
+                f"<p style='text-align: center; margin-bottom: 2px;'>Página <b>{st.session_state.page}</b> de <b>{total_pages}</b> | Total de <b>{st.session_state.total_rows:,}</b> linhas</p>",
+                unsafe_allow_html=True
+            )
+        else:
+            total_filtered = len(df_filtered) 
+            st.markdown(
+                f"<p style='text-align: center; margin-bottom: 2px;'>Exibindo <b>{total_filtered:,}</b> linhas filtradas (Todos)</p>",
+                unsafe_allow_html=True
+            )
 
-        # Download (Tem que ver se faz sentido realmente o download em PDF)
-        csv = df_filtered.to_csv(index=False, encoding='utf-8')
-        st.download_button(
-            label="📥 Baixar esta página filtrada como CSV",
-            data=csv,
-            file_name=f"{TABLE_NAME}_pagina_{st.session_state.page}_filtrada.csv",
-            mime="text/csv"
-        )
-        # Pra baixar tudo teria que usar limit=None
+        col1, col2, col3, col4 = st.columns([1.5, 2, 2, 1.5]) 
 
-
-        # 🔄 Paginação
-        col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
-
+        # Botão Anterior
         with col1:
-            if st.button("⬅ Anterior", disabled=(st.session_state.page <= 1)):
+            if st.button("⬅ Anterior", disabled=(st.session_state.page <= 1) or not show_pagination_controls, use_container_width=True):
                 change_page(-1)
                 st.rerun()
 
+        # Input "Ir para pág."
         with col2:
-            st.write(f"**Página {st.session_state.page}**")
-
-        with col3:
-            total_pages = (st.session_state.total_rows + PAGE_SIZE - 1) // PAGE_SIZE
-            st.caption(f"Total: {st.session_state.total_rows:,} linhas → {total_pages} páginas")
-            # Input para escolher página específica
             page_input = st.number_input(
-                "Ir para página",
+                "Ir para pág.",
                 min_value=1,
-                max_value=total_pages,
+                max_value=max(1, total_pages),
                 value=st.session_state.page,
                 step=1,
-                key="page_input"
+                key="page_input",
+                label_visibility="hidden",
+                disabled=not show_pagination_controls
             )
-            if st.session_state.page_input != st.session_state.page:
+            st.caption("Ir para pág.")
+
+            if show_pagination_controls and (st.session_state.page_input != st.session_state.page):
                 st.session_state.page = page_input
                 st.rerun()
 
+        # Select "Itens por pág."
+        with col3:
+            page_size_options = [25, 50, 100, 250, 500, 1000, 5000, "Todos"]
+            
+            if st.session_state.page_size not in page_size_options:
+                page_size_options.append(st.session_state.page_size)
+                page_size_options.sort(key=lambda x: (isinstance(x, str), x))
+                
+            current_index = page_size_options.index(st.session_state.page_size)
+            
+            new_page_size = st.selectbox(
+                "Itens por pág.",
+                page_size_options,
+                index=current_index,
+                key="page_size_selector",
+                label_visibility="hidden"
+            )
+            st.caption("Itens por pág.")
+            
+            if new_page_size != st.session_state.page_size:
+                st.session_state.page_size = new_page_size
+                st.session_state.page = 1
+                st.rerun()
+
+        # Botão Próximo
         with col4:
-            has_more = len(df) == PAGE_SIZE
-            if st.button("Próximo ➡", disabled=not has_more):
+            if isinstance(st.session_state.page_size, int):
+                has_more = len(df) == st.session_state.page_size
+            else:
+                has_more = False
+                
+            is_last_page = st.session_state.page >= total_pages
+            
+            if st.button("Próximo ➡", disabled=(not has_more or is_last_page or not show_pagination_controls), use_container_width=True):
                 change_page(1)
                 st.rerun()
+
+        # Download
+        
+        st.divider()
+        
+        pdf_bytes = dataframe_to_pdf_bytes(df_filtered)
+        
+        # Gera um PDF absurdo mas é um PDF
+        st.download_button(
+            label="📥 Baixar esta página filtrada como PDF",
+            data=pdf_bytes,
+            file_name=f"{TABLE_NAME}_pagina_{st.session_state.page}_filtrada.pdf", 
+            mime="application/pdf", 
+            use_container_width=True
+        )
 
 except Exception as e:
     st.error(f"Erro ao carregar dados: {e}")
