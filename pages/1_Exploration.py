@@ -4,6 +4,7 @@ import pandas as pd
 from sqlalchemy import create_engine
 import numpy as np
 from fpdf import FPDF
+from Exploration import column_config
 
 st.markdown("""
     <style>
@@ -68,7 +69,7 @@ def load_paginated_data(table_name, page, page_size):
 def dataframe_to_pdf_bytes(df: pd.DataFrame) -> bytes:
     """
     Converte um DataFrame do Pandas em bytes de um PDF.
-    A tabela será em modo paisagem para caber mais colunas.
+    A tabela será em modo paisagem (Landscape) para caber mais colunas.
     """
     pdf = FPDF(orientation="L", unit="mm", format="A4")
     pdf.add_page()
@@ -88,7 +89,7 @@ def dataframe_to_pdf_bytes(df: pd.DataFrame) -> bytes:
     for col in df_str.columns:
         pdf.cell(col_width, line_height, col, border=1, align='C') 
     pdf.ln(line_height)
-    pdf.set_font(family=pdf.font_family, style="", size=pdf.font_size) 
+    pdf.set_font(family=pdf.font_family, style="", size=pdf.font_size)
 
     for _, row in df_str.iterrows():
         for col in df_str.columns:
@@ -111,18 +112,17 @@ def filter_dataframe(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
     modify = col_toggle.checkbox(
         f"Ativar filtros",
         value=st.session_state.filters_active,
-        key=f"filter_checkbox_{table_name}_{st.session_state.page}"
+        key=f"filter_checkbox_{table_name}" 
     )
 
     # Botão limpar filtros
-    if col_clear.button("🔁 Limpar filtros", key=f"clear_filters_{table_name}_{st.session_state.page}"):
+    if col_clear.button("🔁 Limpar filtros", key=f"clear_filters_{table_name}"):
         for key in list(st.session_state.keys()):
             if key.startswith(f"{table_name}_") or key.startswith(f"filter_"):
                 del st.session_state[key]
         
         # Desmarca a flag de filtros ativos
         st.session_state.filters_active = False
-        st.session_state[f"filter_checkbox_{table_name}_{st.session_state.page}"] = False
         st.rerun()
 
     st.session_state.filters_active = modify
@@ -135,12 +135,12 @@ def filter_dataframe(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
     to_filter_columns = st.multiselect(
         "Selecione colunas para filtrar:",
         df.columns,
-        key=f"filter_columns_{table_name}_{st.session_state.page}"
+        key=f"filter_columns_{table_name}"
     )
 
     for column in to_filter_columns:
         col1, col2 = st.columns((0.01, 4))
-        key_prefix = f"{table_name}_{column}_{st.session_state.page}"
+        key_prefix = f"{table_name}_{column}"
 
         if df[column].dropna().empty:
             col2.info(f"⚠️ Coluna '{column}' sem valores disponíveis para filtragem.")
@@ -208,6 +208,8 @@ try:
         st.session_state.total_rows = total_rows
 
     df = load_paginated_data(TABLE_NAME, st.session_state.page, st.session_state.page_size)
+    df.columns = df.columns.str.upper()
+    df = df.rename(columns=column_config.COLUMN_MAPPING)
 
     if df.empty:
         st.warning("Nenhum dado encontrado nesta página.")
@@ -310,8 +312,8 @@ try:
         st.download_button(
             label="📥 Baixar esta página filtrada como PDF",
             data=pdf_bytes,
-            file_name=f"{TABLE_NAME}_pagina_{st.session_state.page}_filtrada.pdf", 
-            mime="application/pdf", 
+            file_name=f"{TABLE_NAME}_pagina_{st.session_state.page}_filtrada.pdf",
+            mime="application/pdf",
             use_container_width=True
         )
 
