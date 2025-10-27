@@ -35,10 +35,10 @@ st.info("Aqui você pode explorar os microdados do ENEM com tabelas, filtros, cr
 
 # Configurações do banco
 DB_HOST = os.environ.get('DB_HOST', '127.0.0.1')
-DB_PORT = os.environ.get('DB_PORT', '5433')
+DB_PORT = os.environ.get('DB_PORT', '5432')
 DB_NAME = os.environ.get('DB_NAME', 'microdados')
 DB_USER = os.environ.get('DB_USER', 'postgres')
-DB_PASS = os.environ.get('DB_PASS', 'admin')
+DB_PASS = os.environ.get('DB_PASS', '123')
 
 # Conexão com o banco
 @st.cache_resource
@@ -56,13 +56,25 @@ def change_page(delta):
 @st.cache_data(ttl=3600)
 def load_paginated_data(table_name, page, page_size):
     engine = get_engine()
-    
+
+    # Base do SELECT
+    base_query = f"""
+        SELECT 
+            t1.*,
+            mun_prova."NOME_MUNICIPIO" AS "NOME_MUNICIPIO_PROVA",
+            mun_esc."NOME_MUNICIPIO" AS "NOME_MUNICIPIO_ESC"
+        FROM "{table_name}" AS t1
+        LEFT JOIN "RELATORIO_MUNICIPIOS" AS mun_prova ON t1."CO_MUNICIPIO_PROVA" = mun_prova."CO_MUNICIPIO"
+        LEFT JOIN "RELATORIO_MUNICIPIOS" AS mun_esc ON t1."CO_MUNICIPIO_ESC" = mun_esc."CO_MUNICIPIO"
+    """
+
+    # Paginação
     if page_size == "Todos":
-        query = f"SELECT * FROM {table_name};"
+        query = base_query + ";"
     else:
         offset = (page - 1) * page_size
-        query = f"SELECT * FROM {table_name} LIMIT {page_size} OFFSET {offset};"
-        
+        query = base_query + f" LIMIT {page_size} OFFSET {offset};"
+
     return pd.read_sql(query, engine)
 
 # Função para criar o PDF (.csv segue fazendo infinitamente mais sentido)
