@@ -68,5 +68,7 @@ COLUMN_MAPPING = {
     "TX_RESPOSTAS_CH": "Respostas de História",
     "TX_RESPOSTAS_CN": "Respostas de Ciências da Natureza",
     "TX_RESPOSTAS_LC": "Respostas de Linguagens e Códigos",
-    "TX_RESPOSTAS_MT": "Respostas de Matemática"
+    "TX_RESPOSTAS_MT": "Respostas de Matemática",
+    "NOME_MUNICIPIO_PROVA": "Município da Prova",
+    "NOME_MUNICIPIO_ESC": "Município da Escola"
 }
