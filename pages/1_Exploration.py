@@ -201,7 +201,11 @@ def render_filter_widgets(table_name: str, metadata: dict, all_columns: list):
         for key in keys_to_delete:
             del st.session_state[key]
         
+        # Desmarca a flag que ativa os filtros
         st.session_state.filters_active = False
+        st.session_state[f"filter_checkbox_{table_name}"] = False
+
+        #Recarrega a tabela sem os filtros aplicados
         st.session_state.page = 1
         st.rerun()
 
