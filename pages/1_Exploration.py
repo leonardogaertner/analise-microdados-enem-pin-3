@@ -38,7 +38,7 @@ DB_HOST = os.environ.get('DB_HOST', '127.0.0.1')
 DB_PORT = os.environ.get('DB_PORT', '5432')
 DB_NAME = os.environ.get('DB_NAME', 'microdados')
 DB_USER = os.environ.get('DB_USER', 'postgres')
-DB_PASS = os.environ.get('DB_PASS', '123')
+DB_PASS = os.environ.get('DB_PASS', 'aluno')
 
 # Conexão com o banco
 @st.cache_resource
@@ -160,6 +160,11 @@ def filter_dataframe(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
 
         # Numéricos
         if pd.api.types.is_numeric_dtype(df[column]):
+            # Se a coluna for um código, usa um tratamento especial (multiselect)
+            if column.upper().startswith('CÓD.'):
+                df = tratar_filtro_codigo(df, column, col2, key_prefix)
+                continue # Pula para a próxima coluna no loop
+            
             _min = int(np.floor(df[column].min()))
             _max = int(np.ceil(df[column].max()))
 
@@ -211,8 +216,31 @@ def filter_dataframe(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
     
     return df
 
-TABLE_NAME = "dados_enem_consolidado"
+def tratar_filtro_codigo(df: pd.DataFrame, column: str, st_column_object, key_prefix: str) -> pd.DataFrame:
+    """
+    Cria um filtro multiselect para colunas numéricas que representam códigos.
+    """
+    # Pega os valores únicos da coluna, remove nulos e converte para inteiro
+    unique_values = sorted([int(v) for v in df[column].dropna().unique()])
+    
+    if not unique_values:
+        st_column_object.info(f"⚠️ Coluna de código '{column}' sem valores válidos para seleção.")
+        return df
 
+    # Cria o widget multiselect para o usuário escolher os códigos
+    selected_values = st_column_object.multiselect(
+        f"Selecione os valores de {column}",
+        options=unique_values,
+        key=f"multi_{key_prefix}"
+    )
+
+    # Se o usuário selecionou algum valor, filtra o DataFrame
+    if selected_values:
+        df = df[df[column].isin(selected_values)]
+        
+    return df
+
+TABLE_NAME = "dados_enem_consolidado"
 try:
     with st.spinner("Carregando total de registros..."):
         count_query = f"SELECT COUNT(*) FROM {TABLE_NAME};"
