@@ -7,16 +7,15 @@ Este módulo tem como objetivo facilitar a análise do desempenho dos estudantes
 ## Funcionalidades
 
 1. **Pré-processamento de Dados (`preprocess.py`)**  
-   - Remoção de colunas irrelevantes (`NU_INSCRICAO`, gabaritos, respostas)  
+   - Remoção de colunas irrelevantes (`NU_INSCRICAO`, `TP_PRESENCA_*`, `TP_STATUS_REDACAO`, `TP_ST_REDACAO`, codigos, gabaritos, respostas)  
    - Tratamento de valores faltantes:
-     - Notas: substituição de `-1` por `NaN` ou categorização (`ND`, `ruim`, `regular`, `bom`, `ótimo`)  
-     - Colunas `object`: preenchimento com `ND`  
+     - Notas: substituição de `NaN` por `-1` ou categorização (`ruim`, `regular`, `bom`, `ótimo`) para notas
    - Codificação de variáveis categóricas usando `LabelEncoder`  
 
 2. **Manipulação do Banco de Dados (`operations.py`)**  
    - Carregamento completo da tabela `dados_enem_consolidado`  
    - Salvamento de DataFrames processados no banco  
-   - Atualização automática da coluna `IN_TREINEIRO` com base em regras de idade e conclusão
+
 
 3. **Treinamento do Modelo (`train_model.py`)**  
    - Algoritmo utilizado: `DecisionTreeClassifier`
