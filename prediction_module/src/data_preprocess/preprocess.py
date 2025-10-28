@@ -2,13 +2,16 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
 
-def preprocess_arvoreDecisao(df: pd.DataFrame, categorizar_colunas=True):
+
+from database.operations import load_data, saveData_BD
+
+def preprocess_data(df: pd.DataFrame, categorizar_colunas=True):
     df = removerColunas(df) 
     df = tratarDadosFaltantes(df)
 
     encoders = {}
     if categorizar_colunas:
-        df = categorizarNotas(df)
+        df = categorizar_nota(df)
         df, encoders = codificarVariaveisCategoricas(df)
     
     # Preencher NaNs restantes com -1 (para algoritmos que não aceitam NaN)
@@ -17,12 +20,15 @@ def preprocess_arvoreDecisao(df: pd.DataFrame, categorizar_colunas=True):
     return df, encoders
 
 
-
 def removerColunas(df):
     colunas_remover = [
-        "NU_INSCRICAO",
-        "CO_MUNICIPIO_PROVA", "CO_MUNICIPIO_ESC",
-        "TP_NACIONALIDADADE",
+        "NU_INSCRICAO", 
+        "CO_PROVA_CH", "CO_PROVA_CN" , "CO_PROVA_LC", "CO_PROVA_MT", 
+        "NU_NOTA_COMP1", "NU_NOTA_COMP2", "NU_NOTA_COMP3", "NU_NOTA_COMP4", "NU_NOTA_COMP5",
+        "TP_STATUS_REDACAO", "TP_ST_CONCLUSAO",
+        "TP_PRESENCA_MT", "TP_PRESENCA_LC", "TP_PRESENCA_CN", "TP_PRESENCA_CH",
+        "CO_UF_ESC", "CO_UF_PROVA",
+        "CO_MUNICIPIO_PROVA", "CO_MUNICIPIO_ESC",  "TP_NACIONALIDADE",
         "TX_GABARITO_CH", "TX_GABARITO_CN", "TX_GABARITO_LC", "TX_GABARITO_MT",
         "TX_RESPOSTAS_CH", "TX_RESPOSTAS_CN", "TX_RESPOSTAS_LC", "TX_RESPOSTAS_MT"
     ]
@@ -48,25 +54,25 @@ def tratarDadosFaltantes(df):
 
     return df
 
-def categorizar_nota(nota):
-    
-    if pd.isna(nota) or nota < 0:
-        return "ND"
-    elif nota < 400:
-        return "ruim"
-    elif nota < 500:
-        return "regular"
-    elif nota < 700:
-        return "bom"
-    else:
-        return "otimo"
-
-def categorizarNotas(df):
+def categorizar_nota(df):
     colunas_notas = ["NU_NOTA_CH", "NU_NOTA_CN", "NU_NOTA_LC", "NU_NOTA_MT", "NU_NOTA_REDACAO"]
     for col in colunas_notas:
         if col in df.columns:
-            df[col] = df[col].apply(categorizar_nota)
+            serie = df[col].dropna()
+            if len(serie) > 0:
+                # Cálculo dos limites dos percentis
+                p15 = np.nanpercentile(serie, 15)
+                p85 = np.nanpercentile(serie, 85)
+
+                # Aplicar categorização conforme os percentis
+                df[col] = df[col].apply(
+                    lambda x: -1 if pd.isna(x)
+                    else (0 if x < p15 else (2 if x > p85 else 1))
+                )
+            else:
+                df[col] = -1
     return df
+
 
 def codificarVariaveisCategoricas(df):
     #Transforma variáveis categóricas em números usando LabelEncoder
@@ -77,6 +83,21 @@ def codificarVariaveisCategoricas(df):
         df[col] = le.fit_transform(df[col].astype(str))
         encoders[col] = le
     return df, encoders
+
+
+if __name__ == "__main__":
+    # Select dados 
+    df = load_data()
+
+    # Pré-processar
+    df_processado, _ = preprocess_data(df)
+
+    # Save DataBase
+    saveData_BD(df_processado, 'dados_enem_consolidado')
+
+    print("Dados processados com sucesso!")
+    print(df_processado.head(30))
+    print(df_processado.describe())
 
   
 
