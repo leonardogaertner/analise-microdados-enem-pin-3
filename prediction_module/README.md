@@ -56,7 +56,7 @@ Gerencia o carregamento e salvamento de dados diretamente no PostgreSQL.
 - Pacotes do Python: 
 
 ```bash
-pip install pandas numpy scikit-learn sqlalchemy psycopg2-binary
+pip install pandas numpy scikit-learn imbalanced-learn sqlalchemy psycopg2-binary joblib
 ```
 
 # Conexão com Banco (.env)
@@ -89,6 +89,45 @@ pip install pandas numpy scikit-learn sqlalchemy psycopg2-binary
     python -m models.train_model
 ```
 
+
+
+# Exemplos de Resultados Parciais 
+ - Exemplos do treinamento da NU_NOTA_MT
+
+NU_NOTA_MT | Quantidade
+-----------|---------
+ 1         | 25067
+-1         | 20800
+ 0         | 5371
+ 2         | 5371
+ 
+
+| Classe           | Precision | Recall | F1-score | Support | 
+| ---------------- | --------- | ------ | -------- | ------- |
+| 0                | 0.82      | 0.76   | 0.79     | 5013    |
+| 1                | 0.73      | 0.81   | 0.77     | 5014    |
+| 2                | 0.82      | 0.79   | 0.81     | 5014    |
+| **Accuracy**     | -         | -      | 0.79     | 15041   |
+| **Macro avg**    | 0.79      | 0.79   | 0.79     | 15041   |
+| **Weighted avg** | 0.79      | 0.79   | 0.79     | 15041   |
+
+| Feature            | Importância |
+| ------------------ | ----------- |
+| TP_LINGUA          | 0.112739    |
+| Q006               | 0.085991    |
+| NO_MUNICIPIO_PROVA | 0.052638    |
+| Q002               | 0.041643    |
+| TP_ANO_CONCLUIU    | 0.041626    |
+| TP_ESTADO_CIVIL    | 0.041059    |
+| NU_ANO             | 0.039853    |
+| SG_UF_PROVA        | 0.039624    |
+| Q024               | 0.039285    |
+| Q005               | 0.035739    |
+| Q001               | 0.034567    |
+| TP_COR_RACA        | 0.034440    |
+| TP_FAIXA_ETARIA    | 0.034222    |
+| TP_SEXO            | 0.029380    |
+| Q022               | 0.028277    |
 
 
 
