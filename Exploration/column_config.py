@@ -23,6 +23,7 @@ COLUMN_MAPPING = {
     "MEDIA_OBJETIVAS": "Média Questões Objetivas",
     "NO_ENTIDADE_CERTIFICACAO": "Nome Entidade Certificação",
     "NO_MUNICIPIO_ESC": "Nome do Município da Escola",
+    "NO_MUNICIPIO_PROVA": "Nome do Município da Prova",
     "NU_ANO": "Ano",
     "NU_INSCRICAO": "Nº de Inscrição",
     "NU_NOTA_CH": "Nota de História",
@@ -69,6 +70,4 @@ COLUMN_MAPPING = {
     "TX_RESPOSTAS_CN": "Respostas de Ciências da Natureza",
     "TX_RESPOSTAS_LC": "Respostas de Linguagens e Códigos",
     "TX_RESPOSTAS_MT": "Respostas de Matemática",
-    "NOME_MUNICIPIO_PROVA": "Município da Prova",
-    "NOME_MUNICIPIO_ESC": "Município da Escola"
 }
