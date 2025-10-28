@@ -39,6 +39,7 @@ def train_model(X_train, y_train):
         @return: modelo treinado
     """
 
+    #OBS: Se overfitting → aumente min_samples_leaf, min_samples_split ou reduza max_depth.
     param_dist = {
         'n_estimators': [200, 400, 600],
         'max_depth': [10, 12, 15, 18],
