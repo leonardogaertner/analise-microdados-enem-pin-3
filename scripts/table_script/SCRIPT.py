@@ -1,8 +1,13 @@
-# -*- coding: utf-8 -*-
-
 import pandas as pd
 from sqlalchemy import create_engine, text, types
 import unicodedata
+try:
+    import psycopg
+except Exception as _e:
+    raise ImportError("The 'psycopg' package is required by SQLAlchemy for the 'psycopg' dialect.\n"
+                      "Install it for this Python interpreter (example):\n"
+                      "  python -m pip install psycopg[binary] --upgrade\n"
+                      "Then re-run the script with the same python executable that installed the package.")
 import time
 import glob
 from io import StringIO
@@ -11,12 +16,21 @@ import os
 import traceback
 import re
 
+# --- Adição para a FASE 4 (Leitura de .xls) ---
+try:
+    import xlrd
+except ImportError:
+    print("AVISO: A biblioteca 'xlrd' não está instalada. Necessária para ler arquivos .xls (Excel 97-2003).")
+    print("Execute: pip install xlrd")
+# --- Fim das adições de import ---
+
+
 # --- Configuração do Banco de Dados PostgreSQL ---
 DB_USER = os.environ.get('DB_USER', 'postgres')
-DB_PASS = os.environ.get('DB_PASS', 'admin')
+DB_PASS = os.environ.get('DB_PASS', 'aluno')
 DB_HOST = os.environ.get('DB_HOST', '127.0.0.1')
 DB_NAME = os.environ.get('DB_NAME', 'microdados')
-DATABASE_URL = f"postgresql+psycopg://{DB_USER}:{DB_PASS}@{DB_HOST}:5433/{DB_NAME}"
+DATABASE_URL = f"postgresql+psycopg://{DB_USER}:{DB_PASS}@{DB_HOST}:5432/{DB_NAME}"
 
 # --- Configurações dos Campos e Arquivos ---
 campos_str = (
@@ -161,139 +175,330 @@ def aplicar_regras_de_negocio(df, ano):
 
     return df
 
+# --- INÍCIO: FUNÇÕES DA FASE 4 ---
+
+# --- FUNÇÃO 'criar_tabela_municipios_do_ibge' MODIFICADA (FASE 4A) ---
+def criar_tabela_municipios_do_ibge(engine):
+    """
+    Carrega a tabela 'RELATORIO_MUNICIPIOS'
+    a partir do arquivo local 'RELATORIO_DTB_BRASIL_2024_MUNICIPIOS.xls'.
+    Lê apenas as 9 colunas especificadas para evitar colunas 'Unnamed'.
+    """
+    # NOME DA TABELA AJUSTADO
+    nome_tabela_municipios_original = 'RELATORIO_MUNICIPIOS'
+    
+    # NOME DO ARQUIVO .XLS AJUSTADO
+    nome_arquivo_xls = "RELATORIO_DTB_BRASIL_2024_MUNICIPIOS.xls"
+    
+    # Usa a variável global 'script_dir' definida no início do script
+    caminho_arquivo_xls = os.path.join(script_dir, nome_arquivo_xls)
+    
+    # --- INÍCIO DA MODIFICAÇÃO (Correção UNNAMED_9) ---
+    # Define explicitamente as 9 colunas que você renomeou no arquivo .XLS
+    colunas_desejadas_municipios = [
+        'UF', 'Nome_UF', 'REGIAO_GEOGRAFICA_INTERMEDIARIA', 
+        'NOME_REGIAO_GEOGRAFICA_INTERMEDIARIA', 'REGIAO_GEOGRAFICA_IMEDIATA', 
+        'NOME_REGIAO_GEOGRAFICA_IMEDIATA', 'MUNICIPIO', 'CO_MUNICIPIO', 'NOME_MUNICIPIO'
+    ]
+    # --- FIM DA MODIFICAÇÃO ---
+    
+    print(f"\n--- FASE 4A: Carga da Tabela de Municípios (Arquivo .XLS Local) ---")
+    print(f"Lendo arquivo: {caminho_arquivo_xls}")
+    print(f"Lendo APENAS as colunas: {colunas_desejadas_municipios}")
+
+    try:
+        try:
+            # MÉTODO DE LEITURA AJUSTADO para pd.read_excel com engine 'xlrd'
+            # ADICIONADO 'usecols' para ler apenas as colunas especificadas
+            df_municipios = pd.read_excel(
+                caminho_arquivo_xls, 
+                engine='xlrd', 
+                sheet_name=0, 
+                usecols=colunas_desejadas_municipios
+            )
+            
+        except FileNotFoundError:
+            print(f"ERRO DE ARQUIVO: O arquivo '{nome_arquivo_xls}' não foi encontrado na pasta do script.")
+            print(f"Caminho completo verificado: {caminho_arquivo_xls}")
+            return False
+        except ImportError:
+            print("ERRO DE IMPORTAÇÃO: A biblioteca 'xlrd' é necessária para ler arquivos .xls (Excel 97-2003).")
+            print("Por favor, instale com: pip install xlrd")
+            return False
+        except ValueError as e_val:
+            # Erro comum se os nomes das colunas no 'usecols' não baterem com o arquivo
+            print(f"ERRO DE VALOR: Verifique se os nomes das colunas no script (usecols) batem EXATAMENTE com os nomes no arquivo XLS.")
+            print(f"Detalhe: {e_val}")
+            return False
+        except Exception as e_xls:
+            print(f"ERRO: Falha ao ler o arquivo Excel '{nome_arquivo_xls}'.")
+            print(f"Erro detalhado: {e_xls}")
+            return False
+
+        if df_municipios.empty:
+            print("Arquivo Excel lido, mas está vazio.")
+            return False
+
+        print(f"Dados lidos ({len(df_municipios)} linhas). Carregando para o banco...")
+
+        # Limpa nomes das colunas para o SQL (remove acentos, espaços, etc.)
+        # USA A FUNÇÃO NORMALIZE_COL_NAME QUE JÁ EXISTE NO SCRIPT
+        df_municipios.columns = [
+            re.sub(r'[^0-9a-zA-Z_]', '_', 
+                   normalize_col_name(col).replace(' ', '_')
+                  ) for col in df_municipios.columns
+        ]
+        
+        # Conecta e sobe os dados
+        with engine.connect() as connection:
+            connection.execute(text(f'DROP TABLE IF EXISTS "{nome_tabela_municipios_original}" CASCADE;'))
+            df_municipios.to_sql(
+                nome_tabela_municipios_original,
+                con=connection,
+                if_exists='replace',
+                index=False
+            )
+            connection.commit()
+        
+        print(f"Sucesso: Tabela '{nome_tabela_municipios_original}' criada no banco a partir do .xls.")
+        return True # Retorna sucesso
+
+    except Exception as e:
+        print(f"ERRO na FASE 4A: Falha ao processar o arquivo .xls local. {e}")
+        traceback.print_exc()
+        return False # Retorna falha
+
+
+def analisar_relacionamentos_municipios(engine, nome_tabela_microdados):
+    """
+    Analisa os relacionamentos entre a tabela 'RELATORIO_MUNICIPIOS'
+    e a tabela de microdados.
+    """
+    # NOME DA TABELA ORIGINAL AJUSTADO
+    nome_tabela_municipios = 'RELATORIO_MUNICIPIOS'
+    
+    print(f"\n--- FASE 4B: Análise de Relacionamentos ---")
+    
+    try:
+        with engine.connect() as connection:
+            # --- Tarefa 1: REMOVIDA (Não há mais cópia) ---
+
+            # --- Tarefa 2: Verificar relacionamentos (colunas em comum) ---
+            print("\nAnalisando possíveis relacionamentos...")
+            
+            # Pega os nomes das colunas de ambas as tabelas
+            microdados_cols = pd.read_sql_query(text(f'SELECT * FROM "{nome_tabela_microdados}" LIMIT 1'), connection).columns
+            # LÊ DA TABELA ORIGINAL, NÃO DA CÓPIA
+            municipios_cols = pd.read_sql_query(text(f'SELECT * FROM "{nome_tabela_municipios}" LIMIT 1'), connection).columns
+            
+            # Normaliza (remove acentos e coloca em maiúsculo) para comparação
+            set_microdados = set(normalize_col_name(col) for col in microdados_cols)
+            set_municipios = set(normalize_col_name(col) for col in municipios_cols)
+            
+            # 1. Verificação de nomes EXATAMENTE IGUAIS
+            colunas_comuns = set_microdados.intersection(set_municipios)
+            
+            if colunas_comuns:
+                print("Relacionamento(s) por NOME EXATO encontrado(s)!\nColunas em comum (nomes normalizados):")
+                for col in sorted(list(colunas_comuns)):
+                    print(f"  - {col}")
+            
+            # 2. Verificação de NOMES LÓGICOS (A NOVA LÓGICA)
+            print("\nVerificando relacionamentos lógicos (PK vs FK)...")
+
+            # Define as colunas-chave da tabela de municípios (baseado no input do usuário)
+            # O script normaliza "CO_MUNICIPIO", "NOME_MUNICIPIO", e "UF"
+            chaves_municipios_esperadas = {'CO_MUNICIPIO', 'NOME_MUNICIPIO', 'UF'}
+            
+            # Define as chaves correspondentes na tabela de microdados (ENEM)
+            mapa_relacionamentos = {
+                'CO_MUNICIPIO': ['CO_MUNICIPIO_PROVA', 'CO_MUNICIPIO_ESC'],
+                'NOME_MUNICIPIO': ['NO_MUNICIPIO_PROVA', 'NO_MUNICIPIO_ESC'],
+                # Mapeia 'UF' (sigla) para as colunas de sigla e código da tabela de microdados
+                'UF': ['SG_UF_PROVA', 'SG_UF_ESC', 'CO_UF_ESC', 'CO_UF_PROVA']
+            }
+
+            # Verifica se as colunas que esperamos existem na tabela de municípios
+            chaves_municipios_encontradas = chaves_municipios_esperadas.intersection(set_municipios)
+            
+            if not chaves_municipios_encontradas:
+                print(f"AVISO: Nenhuma das colunas-chave esperadas ({chaves_municipios_esperadas}) foi encontrada na tabela '{nome_tabela_municipios}'.")
+                print(f"Colunas encontradas (normalizadas): {sorted(list(set_municipios))}")
+                return
+
+            print(f"Colunas-chave encontradas em '{nome_tabela_municipios}': {sorted(list(chaves_municipios_encontradas))}")
+            
+            relacionamentos_encontrados = False
+            # Itera sobre as chaves que encontramos na tabela de municípios
+            for chave_mun in chaves_municipios_encontradas:
+                # Vê se essa chave tem correspondentes no mapa
+                if chave_mun in mapa_relacionamentos:
+                    # Pega as chaves equivalentes do ENEM (ex: ['CO_MUNICIPIO_PROVA', 'CO_MUNICIPIO_ESC'])
+                    chaves_microdados_possiveis = mapa_relacionamentos[chave_mun]
+                    
+                    # Vê se alguma das chaves do ENEM existe na tabela de microdados
+                    for chave_micro in chaves_microdados_possiveis:
+                        if chave_micro in set_microdados:
+                            print(f"  - Relacionamento Lógico Encontrado:")
+                            print(f"    '{nome_tabela_municipios}'.{chave_mun}  ->  '{nome_tabela_microdados}'.{chave_micro}")
+                            relacionamentos_encontrados = True
+
+            if not relacionamentos_encontrados and not colunas_comuns:
+                print("\nNenhum relacionamento lógico automático foi encontrado.")
+                print(f"Colunas Microdados (normalizadas): {sorted(list(set_microdados))}")
+                print(f"Colunas Municípios (normalizadas): {sorted(list(set_municipios))}")
+
+    except Exception as e:
+        print(f"\nERRO na FASE 4B ao tentar analisar a tabela.")
+        print(f"Erro detalhado: {e}")
+
+# --- FIM: FUNÇÕES DA FASE 4 ---
+
+
 # --- SCRIPT PRINCIPAL ---
 if __name__ == "__main__":
     start_time_total = time.time()
     engine = create_engine( DATABASE_URL, pool_size=10, max_overflow=15, pool_timeout=60, pool_pre_ping=True )
+    
+    # Busca arquivos CSV de microdados
     arquivos_csv = glob.glob(os.path.join(diretorio_csv, '*.csv'))
-    if not arquivos_csv: print(f"ERRO: Nenhum arquivo .csv encontrado em: {diretorio_csv}"); exit()
+    # Filtra para NÃO incluir o CSV de campos calculados
+    # Não precisa filtrar pelo .xls, pois o glob("*.csv") já o ignora
+    arquivos_csv = [f for f in arquivos_csv if 'Campos Calculados' not in f]
 
-    print("--- FASE 1: Analisando cabeçalhos... ---")
-    master_columns = set(campos_desejados); all_file_headers = {}
-    for arquivo in arquivos_csv:
+    if not arquivos_csv: 
+        print(f"AVISO: Nenhum arquivo .csv de microdados (ENEM/PARTICIPANTES) encontrado em: {diretorio_csv}")
+        # Não usamos exit() para permitir que a FASE 4 rode mesmo assim
+    else:
+        print("--- FASE 1: Analisando cabeçalhos... ---")
+        master_columns = set(campos_desejados); all_file_headers = {}
+        for arquivo in arquivos_csv:
+            try:
+                filename = os.path.basename(arquivo); print(f"Lendo: {filename}")
+                raw_header = pd.read_csv(arquivo, encoding='latin1', sep=';', nrows=0, low_memory=False).columns
+                header = [normalize_col_name(h) for h in raw_header]
+                all_file_headers[filename] = header; master_columns.update(header)
+            except Exception as e: print(f" Aviso: Falha ao ler {filename}. Erro: {e}"); all_file_headers[filename] = []
+        if 'NU_SEQUENCIAL' in master_columns: master_columns.remove('NU_SEQUENCIAL'); master_columns.add('NU_INSCRICAO'); print(" Coluna 'NU_SEQUENCIAL' mapeada para 'NU_INSCRICAO'.")
+        extra_qs = [col for col in master_columns if col.startswith('Q') and len(col) > 1 and col[1:].isdigit() and int(col[1:]) > 25]
+        if extra_qs: print(f" Removendo Q>25: {extra_qs}"); master_columns -= set(extra_qs)
+        novos_campos = [ 'REGIAO_CANDIDATO', 'FLAG_CAPITAL', 'REGIAO_ESCOLA', 'TIPO_ESCOLA_AGRUPADO', 'MEDIA_OBJETIVAS', 'MEDIA_GERAL', 'INDICADOR_ABSENTEISMO', 'INDICADOR_REDACAO_ZERADA', 'RENDA_FAMILIAR', 'ESCOLARIDADE_PAIS_AGRUPADO', 'INDICE_ACESSO_TECNOLOGIA', 'TEMPO_FORA_ESCOLA', 'FLAG_CANDIDATO_ADULTO' ]
+        master_columns.update(novos_campos); master_columns_list = sorted(list(master_columns))
+        print(f"\nColunas finais ({len(master_columns_list)}): {master_columns_list}")
+
+        tipos_de_dados_sql = {}
+        for col in master_columns_list:
+            if col in ['NU_NOTA_CN', 'NU_NOTA_CH', 'NU_NOTA_LC', 'NU_NOTA_MT', 'NU_NOTA_COMP1', 'NU_NOTA_COMP2', 'NU_NOTA_COMP3', 'NU_NOTA_COMP4', 'NU_NOTA_COMP5', 'NU_NOTA_REDACAO', 'MEDIA_OBJETIVAS', 'MEDIA_GERAL']: tipos_de_dados_sql[col] = types.NUMERIC(10, 2)
+            elif col in ['NU_ANO', 'TEMPO_FORA_ESCOLA']: tipos_de_dados_sql[col] = types.INTEGER
+            elif col in ['NU_INSCRICAO']: tipos_de_dados_sql[col] = types.BIGINT
+            elif col.startswith('CO_') or col in ['TP_FAIXA_ETARIA', 'TP_COR_RACA', 'TP_NACIONALIDADE', 'TP_ST_CONCLUSAO', 'TP_ANO_CONCLUIU', 'TP_ESCOLA', 'TP_ENSINO', 'IN_TREINEIRO', 'TP_DEPENDENCIA_ADM_ESC', 'TP_LOCALIZACAO_ESC', 'TP_SIT_FUNC_ESC', 'TP_PRESENCA_CN', 'TP_PRESENCA_CH', 'TP_PRESENCA_LC', 'TP_PRESENCA_MT', 'TP_LINGUA', 'TP_STATUS_REDACAO', 'Q005', 'TP_ESTADO_CIVIL']: # Adicionado TP_ESTADO_CIVIL
+                 tipos_de_dados_sql[col] = types.INTEGER # Mantendo INTEGER para códigos e tipos
+            else: tipos_de_dados_sql[col] = types.VARCHAR
+        print(f"\nTipos SQL definidos: {tipos_de_dados_sql}")
+
+        print("\n--- FASE 2: Processando e carregando arquivos ---")
+        is_first_upload = True; total_rows_processed = 0
         try:
-            filename = os.path.basename(arquivo); print(f"Lendo: {filename}")
-            raw_header = pd.read_csv(arquivo, encoding='latin1', sep=';', nrows=0, low_memory=False).columns
-            header = [normalize_col_name(h) for h in raw_header]
-            all_file_headers[filename] = header; master_columns.update(header)
-        except Exception as e: print(f" Aviso: Falha ao ler {filename}. Erro: {e}"); all_file_headers[filename] = []
-    if 'NU_SEQUENCIAL' in master_columns: master_columns.remove('NU_SEQUENCIAL'); master_columns.add('NU_INSCRICAO'); print(" Coluna 'NU_SEQUENCIAL' mapeada para 'NU_INSCRICAO'.")
-    extra_qs = [col for col in master_columns if col.startswith('Q') and len(col) > 1 and col[1:].isdigit() and int(col[1:]) > 25]
-    if extra_qs: print(f" Removendo Q>25: {extra_qs}"); master_columns -= set(extra_qs)
-    novos_campos = [ 'REGIAO_CANDIDATO', 'FLAG_CAPITAL', 'REGIAO_ESCOLA', 'TIPO_ESCOLA_AGRUPADO', 'MEDIA_OBJETIVAS', 'MEDIA_GERAL', 'INDICADOR_ABSENTEISMO', 'INDICADOR_REDACAO_ZERADA', 'RENDA_FAMILIAR', 'ESCOLARIDADE_PAIS_AGRUPADO', 'INDICE_ACESSO_TECNOLOGIA', 'TEMPO_FORA_ESCOLA', 'FLAG_CANDIDATO_ADULTO' ]
-    master_columns.update(novos_campos); master_columns_list = sorted(list(master_columns))
-    print(f"\nColunas finais ({len(master_columns_list)}): {master_columns_list}")
-
-    tipos_de_dados_sql = {}
-    for col in master_columns_list:
-        if col in ['NU_NOTA_CN', 'NU_NOTA_CH', 'NU_NOTA_LC', 'NU_NOTA_MT', 'NU_NOTA_COMP1', 'NU_NOTA_COMP2', 'NU_NOTA_COMP3', 'NU_NOTA_COMP4', 'NU_NOTA_COMP5', 'NU_NOTA_REDACAO', 'MEDIA_OBJETIVAS', 'MEDIA_GERAL']: tipos_de_dados_sql[col] = types.NUMERIC(10, 2)
-        elif col in ['NU_ANO', 'TEMPO_FORA_ESCOLA']: tipos_de_dados_sql[col] = types.INTEGER
-        elif col in ['NU_INSCRICAO']: tipos_de_dados_sql[col] = types.BIGINT
-        elif col.startswith('CO_') or col in ['TP_FAIXA_ETARIA', 'TP_COR_RACA', 'TP_NACIONALIDADE', 'TP_ST_CONCLUSAO', 'TP_ANO_CONCLUIU', 'TP_ESCOLA', 'TP_ENSINO', 'IN_TREINEIRO', 'TP_DEPENDENCIA_ADM_ESC', 'TP_LOCALIZACAO_ESC', 'TP_SIT_FUNC_ESC', 'TP_PRESENCA_CN', 'TP_PRESENCA_CH', 'TP_PRESENCA_LC', 'TP_PRESENCA_MT', 'TP_LINGUA', 'TP_STATUS_REDACAO', 'Q005', 'TP_ESTADO_CIVIL']: # Adicionado TP_ESTADO_CIVIL
-             tipos_de_dados_sql[col] = types.INTEGER # Mantendo INTEGER para códigos e tipos
-        else: tipos_de_dados_sql[col] = types.VARCHAR
-    print(f"\nTipos SQL definidos: {tipos_de_dados_sql}")
-
-    print("\n--- FASE 2: Processando e carregando arquivos ---")
-    is_first_upload = True; total_rows_processed = 0
-    try:
-        with engine.connect() as connection: connection.execute(text(f'DROP TABLE IF EXISTS "{nome_tabela}" CASCADE;')); connection.commit()
-        print(f"Tabela '{nome_tabela}' antiga removida.")
-    except Exception as e: print(f"Aviso: Falha ao dropar tabela. Erro: {e}")
-    try:
-        empty_df = pd.DataFrame(columns=master_columns_list).astype({col: 'float64' for col, dtype in tipos_de_dados_sql.items() if isinstance(dtype, (types.NUMERIC, types.FLOAT))} | {col: 'Int64' for col, dtype in tipos_de_dados_sql.items() if isinstance(dtype, (types.INTEGER, types.BIGINT))} | {col: 'object' for col, dtype in tipos_de_dados_sql.items() if isinstance(dtype, (types.VARCHAR, types.TEXT))})
-        print("Criando schema da tabela no banco..."); empty_df.to_sql( name=nome_tabela, con=engine, if_exists='replace', index=False, dtype=tipos_de_dados_sql ); print("Schema criado.")
-        is_first_upload = False
-    except Exception as e: print(f"\nERRO CRÍTICO ao criar schema '{nome_tabela}'. Abortando.\nErro: {e}"); traceback.print_exc(); engine.dispose(); exit()
-
-    for arquivo in arquivos_csv:
-        start_time_file = time.time(); filename = os.path.basename(arquivo); print(f"\nProcessando: {filename}")
+            with engine.connect() as connection: connection.execute(text(f'DROP TABLE IF EXISTS "{nome_tabela}" CASCADE;')); connection.commit()
+            print(f"Tabela '{nome_tabela}' antiga removida.")
+        except Exception as e: print(f"Aviso: Falha ao dropar tabela. Erro: {e}")
         try:
-            match = re.search(r'(19|20)\d{2}', filename)
-            if match: ano_arquivo = int(match.group(0))
-            else: raise ValueError("Ano não encontrado")
-            print(f"  Ano: {ano_arquivo}")
-        except ValueError as e: print(f"  Aviso: {e} em '{filename}'. Pulando."); continue
+            empty_df = pd.DataFrame(columns=master_columns_list).astype({col: 'float64' for col, dtype in tipos_de_dados_sql.items() if isinstance(dtype, (types.NUMERIC, types.FLOAT))} | {col: 'Int64' for col, dtype in tipos_de_dados_sql.items() if isinstance(dtype, (types.INTEGER, types.BIGINT))} | {col: 'object' for col, dtype in tipos_de_dados_sql.items() if isinstance(dtype, (types.VARCHAR, types.TEXT))})
+            print("Criando schema da tabela no banco..."); empty_df.to_sql( name=nome_tabela, con=engine, if_exists='replace', index=False, dtype=tipos_de_dados_sql ); print("Schema criado.")
+            is_first_upload = False
+        except Exception as e: print(f"\nERRO CRÍTICO ao criar schema '{nome_tabela}'. Abortando.\nErro: {e}"); traceback.print_exc(); engine.dispose(); exit()
 
-        rows_in_file = 0
-        try:
-            file_specific_header_normalized = all_file_headers.get(filename, [])
-            if not file_specific_header_normalized:
-                 print(f"  Aviso: Cabeçalho não lido na Fase 1 para {filename}. Lendo novamente.")
-                 raw_header = pd.read_csv(arquivo, encoding='latin1', sep=';', nrows=0, low_memory=False).columns
-                 file_specific_header_normalized = [normalize_col_name(h) for h in raw_header]
-            usecols_normalized = [col for col in file_specific_header_normalized if col in master_columns_list]
-            try: # Tenta mapear de volta, pode falhar se o cabeçalho mudou ou teve erro na Fase 1
-                raw_header_map = {normalize_col_name(h): h for h in pd.read_csv(arquivo, encoding='latin1', sep=';', nrows=0, low_memory=False).columns}
-                usecols_original = [raw_header_map[norm_col] for norm_col in usecols_normalized if norm_col in raw_header_map]
-                if not usecols_original: # Se mapeamento falhar, lê todas as colunas como fallback
-                    print("   Aviso: Mapeamento de colunas falhou, lendo todas as colunas.")
-                    usecols_original = None
-            except Exception as map_err:
-                 print(f"   Aviso: Erro ao mapear colunas para leitura otimizada ({map_err}), lendo todas as colunas.")
-                 usecols_original = None
+        for arquivo in arquivos_csv:
+            start_time_file = time.time(); filename = os.path.basename(arquivo); print(f"\nProcessando: {filename}")
+            try:
+                match = re.search(r'(19|20)\d{2}', filename)
+                if match: ano_arquivo = int(match.group(0))
+                else: raise ValueError("Ano não encontrado")
+                print(f"  Ano: {ano_arquivo}")
+            except ValueError as e: print(f"  Aviso: {e} em '{filename}'. Pulando."); continue
 
-            reader = pd.read_csv( arquivo, encoding='latin1', sep=';', chunksize=chunk_size, low_memory=False, usecols=usecols_original )
-            for i, chunk in enumerate(reader):
-                start_time_chunk = time.time()
-                try:
-                    chunk.columns = [normalize_col_name(c) for c in chunk.columns]
-                    if 'NU_SEQUENCIAL' in chunk.columns: chunk.rename(columns={'NU_SEQUENCIAL': 'NU_INSCRICAO'}, inplace=True)
-                    
-                    # Aplica regras de negócio (usando cópia para segurança)
-                    # Seleciona colunas *antes* de passar para a função
-                    cols_present_in_chunk = [col for col in master_columns_list if col in chunk.columns]
-                    chunk_processado = aplicar_regras_de_negocio(chunk[cols_present_in_chunk].copy(), ano_arquivo)
-                    
-                    # Reindexa para o schema mestre
-                    chunk_alinhado = chunk_processado.reindex(columns=master_columns_list)
+            rows_in_file = 0
+            try:
+                file_specific_header_normalized = all_file_headers.get(filename, [])
+                if not file_specific_header_normalized:
+                     print(f"  Aviso: Cabeçalho não lido na Fase 1 para {filename}. Lendo novamente.")
+                     raw_header = pd.read_csv(arquivo, encoding='latin1', sep=';', nrows=0, low_memory=False).columns
+                     file_specific_header_normalized = [normalize_col_name(h) for h in raw_header]
+                usecols_normalized = [col for col in file_specific_header_normalized if col in master_columns_list]
+                try: # Tenta mapear de volta, pode falhar se o cabeçalho mudou ou teve erro na Fase 1
+                    raw_header_map = {normalize_col_name(h): h for h in pd.read_csv(arquivo, encoding='latin1', sep=';', nrows=0, low_memory=False).columns}
+                    usecols_original = [raw_header_map[norm_col] for norm_col in usecols_normalized if norm_col in raw_header_map]
+                    if not usecols_original: # Se mapeamento falhar, lê todas as colunas como fallback
+                        print("   Aviso: Mapeamento de colunas falhou, lendo todas as colunas.")
+                        usecols_original = None
+                except Exception as map_err:
+                     print(f"   Aviso: Erro ao mapear colunas para leitura otimizada ({map_err}), lendo todas as colunas.")
+                     usecols_original = None
 
-                    # --- INÍCIO DA LÓGICA DE COERÇÃO REFINADA ---
-                    for col, sql_type in tipos_de_dados_sql.items():
-                         if col in chunk_alinhado.columns:
-                            try:
-                                # Trata tipos numéricos (NUMERIC, FLOAT, INTEGER, BIGINT)
-                                if isinstance(sql_type, (types.NUMERIC, types.FLOAT, types.INTEGER, types.BIGINT)):
-                                    # 1. Substitui strings vazias por NaN ANTES de coagir
-                                    chunk_alinhado.loc[chunk_alinhado[col] == '', col] = np.nan
+                reader = pd.read_csv( arquivo, encoding='latin1', sep=';', chunksize=chunk_size, low_memory=False, usecols=usecols_original )
+                for i, chunk in enumerate(reader):
+                    start_time_chunk = time.time()
+                    try:
+                        chunk.columns = [normalize_col_name(c) for c in chunk.columns]
+                        if 'NU_SEQUENCIAL' in chunk.columns: chunk.rename(columns={'NU_SEQUENCIAL': 'NU_INSCRICAO'}, inplace=True)
+                        
+                        # Aplica regras de negócio (usando cópia para segurança)
+                        # Seleciona colunas *antes* de passar para a função
+                        cols_present_in_chunk = [col for col in master_columns_list if col in chunk.columns]
+                        chunk_processado = aplicar_regras_de_negocio(chunk[cols_present_in_chunk].copy(), ano_arquivo)
+                        
+                        # Reindexa para o schema mestre
+                        chunk_alinhado = chunk_processado.reindex(columns=master_columns_list)
+
+                        # --- INÍCIO DA LÓGICA DE COERÇÃO REFINADA ---
+                        for col, sql_type in tipos_de_dados_sql.items():
+                             if col in chunk_alinhado.columns:
+                                try:
+                                    # Trata tipos numéricos (NUMERIC, FLOAT, INTEGER, BIGINT)
+                                    if isinstance(sql_type, (types.NUMERIC, types.FLOAT, types.INTEGER, types.BIGINT)):
+                                        # 1. Substitui strings vazias por NaN ANTES de coagir
+                                        chunk_alinhado.loc[chunk_alinhado[col] == '', col] = np.nan
+                                        
+                                        # 2. Coage para numérico, transformando outros erros em NaN
+                                        numeric_series = pd.to_numeric(chunk_alinhado[col], errors='coerce')
+
+                                        # 3. Atribui de volta baseado no tipo SQL específico
+                                        if isinstance(sql_type, (types.INTEGER, types.BIGINT)):
+                                            chunk_alinhado[col] = numeric_series.astype('Int64') # Usa Int64 que suporta nulos (NaN)
+                                        else: # NUMERIC, FLOAT
+                                            chunk_alinhado[col] = numeric_series # Deixa como float64
                                     
-                                    # 2. Coage para numérico, transformando outros erros em NaN
-                                    numeric_series = pd.to_numeric(chunk_alinhado[col], errors='coerce')
+                                    # Trata tipos string (VARCHAR, TEXT)
+                                    elif isinstance(sql_type, (types.VARCHAR, types.TEXT)):
+                                        # Converte para string, substitui nulos/vazios por None
+                                        chunk_alinhado[col] = chunk_alinhado[col].astype(str).replace('<NA>', None).replace('nan', None).replace('', None)
 
-                                    # 3. Atribui de volta baseado no tipo SQL específico
-                                    if isinstance(sql_type, (types.INTEGER, types.BIGINT)):
-                                        chunk_alinhado[col] = numeric_series.astype('Int64') # Usa Int64 que suporta nulos (NaN)
-                                    else: # NUMERIC, FLOAT
-                                        chunk_alinhado[col] = numeric_series # Deixa como float64
-                                
-                                # Trata tipos string (VARCHAR, TEXT)
-                                elif isinstance(sql_type, (types.VARCHAR, types.TEXT)):
-                                    # Converte para string, substitui nulos/vazios por None
-                                    chunk_alinhado[col] = chunk_alinhado[col].astype(str).replace('<NA>', None).replace('nan', None).replace('', None)
+                                    # Adicione outros tipos se necessário
+                                    # else: pass
 
-                                # Adicione outros tipos se necessário
-                                # else: pass
+                                except Exception as coerc_e:
+                                    print(f"\n   Alerta de Coerção inesperado na coluna '{col}': {coerc_e}. Forçando None.")
+                                    chunk_alinhado[col] = None
+                        # --- FIM DA LÓGICA DE COERÇÃO REFINADA ---
 
-                            except Exception as coerc_e:
-                                print(f"\n   Alerta de Coerção inesperado na coluna '{col}': {coerc_e}. Forçando None.")
-                                chunk_alinhado[col] = None
-                    # --- FIM DA LÓGICA DE COERÇÃO REFINADA ---
+                        print(f"  Chunk {i+1}: {len(chunk_alinhado)} linhas. Processando e convertendo tipos...", end="", flush=True)
 
-                    print(f"  Chunk {i+1}: {len(chunk_alinhado)} linhas. Processando e convertendo tipos...", end="", flush=True)
+                        chunk_alinhado.to_sql( name=nome_tabela, con=engine, if_exists='append', index=False, method='multi', chunksize=upload_chunksize )
+                        end_time_chunk = time.time(); rows_in_file += len(chunk_alinhado); total_rows_processed += len(chunk_alinhado)
+                        print(f" OK. ({end_time_chunk - start_time_chunk:.2f}s)")
+                    except Exception as e_chunk: print(f"\n  Falha no chunk {i+1} de {filename}: {str(e_chunk)}"); traceback.print_exc(); print(f"  Pulando chunk {i+1}.")
+                end_time_file = time.time(); print(f"  Arquivo {filename} ({rows_in_file} linhas) processado em {end_time_file - start_time_file:.2f}s.")
+            except Exception as e_file: print(f"\n  Falha ao processar {filename}: {str(e_file)}"); traceback.print_exc(); print(f"  Pulando {filename}.")
 
-                    chunk_alinhado.to_sql( name=nome_tabela, con=engine, if_exists='append', index=False, method='multi', chunksize=upload_chunksize )
-                    end_time_chunk = time.time(); rows_in_file += len(chunk_alinhado); total_rows_processed += len(chunk_alinhado)
-                    print(f" OK. ({end_time_chunk - start_time_chunk:.2f}s)")
-                except Exception as e_chunk: print(f"\n  Falha no chunk {i+1} de {filename}: {str(e_chunk)}"); traceback.print_exc(); print(f"  Pulando chunk {i+1}.")
-            end_time_file = time.time(); print(f"  Arquivo {filename} ({rows_in_file} linhas) processado em {end_time_file - start_time_file:.2f}s.")
-        except Exception as e_file: print(f"\n  Falha ao processar {filename}: {str(e_file)}"); traceback.print_exc(); print(f"  Pulando {filename}.")
+        end_time_total = time.time(); print(f"\nProcessamento concluído em {end_time_total - start_time_total:.2f}s.")
+        print(f"Total de {total_rows_processed} linhas inseridas em '{nome_tabela}'.")
 
-    end_time_total = time.time(); print(f"\nProcessamento concluído em {end_time_total - start_time_total:.2f}s.")
-    print(f"Total de {total_rows_processed} linhas inseridas em '{nome_tabela}'.")
+    # --- INÍCIO DA SEÇÃO MODIFICADA (FASE 3 e 4) ---
 
     print("\n--- FASE 3: Verificando dados no banco... ---")
-    if total_rows_processed == 0 and is_first_upload: print("Nenhum dado carregado.")
-    else:
+    
+    # Verifica a tabela de microdados apenas se ela foi processada
+    if arquivos_csv: 
         try:
             with engine.connect() as connection:
                 total_db_rows = connection.execute(text(f'SELECT COUNT(*) FROM "{nome_tabela}";')).scalar_one()
@@ -301,7 +506,32 @@ if __name__ == "__main__":
                      print(f"Contagem total na tabela '{nome_tabela}': {total_db_rows}")
                      df_verificacao = pd.read_sql_query(text(f'SELECT "NU_ANO", COUNT(*) as total_registros FROM "{nome_tabela}" GROUP BY "NU_ANO" ORDER BY "NU_ANO";'), connection)
                      print("Contagem por ano:"); print(df_verificacao.to_string(index=False))
-                else: print(f"Tabela '{nome_tabela}' criada, mas vazia (0 registros). Verifique logs.")
-        except Exception as e: print(f"Erro ao verificar dados no banco: {e}")
+                else: 
+                     print(f"Tabela '{nome_tabela}' criada, mas vazia (0 registros). Verifique logs.")
+        except Exception as e: 
+            print(f"Erro ao verificar dados da tabela '{nome_tabela}': {e}")
+    else:
+        print("Pula verificação da FASE 3 (nenhum microdado processado).")
+
+
+    print("\n--- FASE 4: Carga e Análise da Tabela de Municípios ---")
+    
+    # 4A: Tenta carregar a tabela principal do IBGE a partir do .XLS local
+    # Esta função irá criar 'RELATORIO_MUNICIPIOS'
+    sucesso_carga_ibge = criar_tabela_municipios_do_ibge(engine)
+    
+    # 4B: Se a tabela foi criada E a tabela de microdados também existe, executa a análise
+    if sucesso_carga_ibge and arquivos_csv:
+        # Esta função (MODIFICADA) agora apenas analisa
+        # a relação com 'dados_enem_consolidado' (a var 'nome_tabela')
+        analisar_relacionamentos_municipios(engine, nome_tabela)
+    elif not sucesso_carga_ibge:
+        print("\n--- FASE 4B: Pula Análise de Relacionamentos (Carga da DTB falhou) ---")
+    elif not arquivos_csv:
+         print(f"\n--- FASE 4B: Pula Análise de Relacionamentos (Tabela '{nome_tabela}' não foi carregada) ---")
+    
+    # --- FIM DA NOVA LÓGICA ADICIONADA ---
 
     engine.dispose(); print("Pool de conexões liberado.")
+
+    # --- FIM DA SEÇÃO MODIFICADA ---
