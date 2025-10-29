@@ -12,7 +12,7 @@ DB_NAME = 'microdados'
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}/{DB_NAME}"
 
 # --- Configurações ---
-ARQUIVO_CSV = r'C:\Users\schul\Downloads\dados_completos.csv'
+ARQUIVO_CSV = r'C:\Users\mario\Downloads\dados_completos.csv'
 NOME_TABELA = 'questoes_enem'
 TAMANHO_CHUNK = 50000
 
@@ -66,7 +66,7 @@ try:
         'parametro_b': types.FLOAT,
         'parametro_c': types.FLOAT,
         'itens': types.INTEGER,
-        'provas': types.INTEGER,
+        'provas': types.TEXT,
         'versao_digital': types.TEXT
     }
 
@@ -106,7 +106,7 @@ try:
                 chunk[col] = chunk[col].replace('nan', None)
 
         # Converter colunas numéricas
-        for col in ['ano', 'numero_questao', 'item_abandonado', 'itens', 'provas']:
+        for col in ['ano', 'numero_questao', 'item_abandonado', 'itens']:
             if col in chunk.columns:
                 chunk[col] = pd.to_numeric(chunk[col], errors='coerce').astype('Int64')
 
