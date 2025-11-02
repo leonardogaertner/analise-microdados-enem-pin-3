@@ -40,10 +40,10 @@ st.title("Exploração dos Dados")
 
 # Configurações do banco
 DB_HOST = os.environ.get('DB_HOST', '127.0.0.1')
-DB_PORT = os.environ.get('DB_PORT', '5432')
+DB_PORT = os.environ.get('DB_PORT', '5433')
 DB_NAME = os.environ.get('DB_NAME', 'microdados')
 DB_USER = os.environ.get('DB_USER', 'postgres')
-DB_PASS = os.environ.get('DB_PASS', 'aluno')
+DB_PASS = os.environ.get('DB_PASS', 'admin')
 
 # Conexão com o banco
 @st.cache_resource
@@ -450,8 +450,47 @@ try:
     if df.empty:
         st.warning("Nenhum dado encontrado com estes filtros e paginação.")
     else:
-        # 8. Exibir dataframe com nomes amigáveis
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        
+        # --- INÍCIO DA MODIFICAÇÃO (SELETOR DE COLUNAS) ---
+
+        # Pega todas as colunas (já com nomes amigáveis)
+        all_available_columns = list(df.columns)
+
+        # <-- MODIFIQUE AQUI!
+        # Defina a lista de colunas que você quer exibir por padrão.
+        # Use os nomes AMIGÁVEIS (ex: "Cód. Município Escola")
+        DEFAULT_COLUMNS = [
+            "Ano", 
+            "Média Geral"
+        ]
+
+        # Garante que as colunas padrão realmente existem neste dataframe
+        # (para evitar erros caso a query mude)
+        default_safe = [col for col in DEFAULT_COLUMNS if col in all_available_columns]
+
+        # Se a lista 'default_safe' ficar vazia por algum motivo, 
+        # mostre as 5 primeiras colunas como um fallback.
+        if not default_safe and all_available_columns:
+            default_safe = all_available_columns[:5]
+
+        st.markdown("#### 📊 Seleção de Colunas")
+        
+        # Cria o seletor de colunas para o usuário
+        selected_cols = st.multiselect(
+            "Selecione as colunas para exibir:",
+            options=all_available_columns,
+            default=default_safe,
+            key="column_selector"
+        )
+        
+        # --- FIM DA MODIFICAÇÃO ---
+        
+        
+        # 8. Exibir dataframe com colunas selecionadas
+        if selected_cols:
+            st.dataframe(df[selected_cols], use_container_width=True, hide_index=True)
+        else:
+            st.info("Nenhuma coluna selecionada para exibição.")
         
         # Paginação
         if st.session_state.page_size == "Todos":
@@ -529,15 +568,23 @@ try:
         
         st.divider()
         
-        pdf_bytes = dataframe_to_pdf_bytes(df)
+        # Modificação: Passar o dataframe filtrado (df[selected_cols]) para o PDF
+        # Se você quiser que o PDF sempre contenha TODAS as colunas, 
+        # mantenha a linha original: pdf_bytes = dataframe_to_pdf_bytes(df)
         
-        st.download_button(
-            label="📥 Baixar esta página (filtrada) como PDF",
-            data=pdf_bytes,
-            file_name=f"{TABLE_NAME}_pagina_{st.session_state.page}_filtrada.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
+        if selected_cols:
+            pdf_bytes = dataframe_to_pdf_bytes(df[selected_cols])
+            
+            st.download_button(
+                label="📥 Baixar esta página (filtrada e colunas selecionadas) como PDF",
+                data=pdf_bytes,
+                file_name=f"{TABLE_NAME}_pagina_{st.session_state.page}_filtrada.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+        else:
+            st.warning("Selecione pelo menos uma coluna para gerar o PDF.")
+
 
 except Exception as e:
     st.error(f"Erro ao carregar dados: {e}")
