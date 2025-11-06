@@ -40,10 +40,10 @@ st.title("Exploração dos Dados")
 
 # Configurações do banco
 DB_HOST = os.environ.get('DB_HOST', '127.0.0.1')
-DB_PORT = os.environ.get('DB_PORT', '5433')
+DB_PORT = os.environ.get('DB_PORT', '5432')
 DB_NAME = os.environ.get('DB_NAME', 'microdados')
 DB_USER = os.environ.get('DB_USER', 'postgres')
-DB_PASS = os.environ.get('DB_PASS', 'admin')
+DB_PASS = os.environ.get('DB_PASS', 'aluno')
 
 # Conexão com o banco
 @st.cache_resource
@@ -116,17 +116,32 @@ def get_filter_metadata(table_name):
             try:
                 dtype = df_sample_mapped.dtypes[mapped_column]
                 
-                # Usa 'original_col' (MAIÚSCULO e com aspas) nas queries SQL
-                if pd.api.types.is_numeric_dtype(dtype):
-                    if mapped_column.upper().startswith('CÓD.'):
-                        unique_vals_df = pd.read_sql(f'SELECT DISTINCT "{original_col}" FROM "{table_name}" WHERE "{original_col}" IS NOT NULL ORDER BY "{original_col}" ASC LIMIT 1000', engine)
-                        col_info['type'] = 'code'
-                        col_info['options'] = sorted([int(v) for v in unique_vals_df.iloc[:, 0].dropna().unique()])
-                    else:
-                        min_max_df = pd.read_sql(f'SELECT MIN("{original_col}"), MAX("{original_col}") FROM "{table_name}"', engine)
-                        col_info['type'] = 'numeric'
-                        col_info['min'] = int(np.floor(min_max_df.iloc[0, 0] if pd.notnull(min_max_df.iloc[0, 0]) else 0))
-                        col_info['max'] = int(np.ceil(min_max_df.iloc[0, 1] if pd.notnull(min_max_df.iloc[0, 1]) else 0))
+                # --- INÍCIO DA CORREÇÃO ---
+                # A lógica foi invertida. Primeiro checamos se é uma coluna 'CÓD.'
+                # pelo nome, independentemente do tipo de dado (numérico ou texto).
+                
+                if mapped_column.upper().startswith('CÓD.'):
+                    unique_vals_df = pd.read_sql(f'SELECT DISTINCT "{original_col}" FROM "{table_name}" WHERE "{original_col}" IS NOT NULL ORDER BY "{original_col}" ASC LIMIT 1000', engine)
+                    col_info['type'] = 'code'
+                    
+                    # Tenta converter os valores para int (para o placeholder)
+                    # mas não falha se não conseguir (ex: se o código for 'SP')
+                    options_int = []
+                    for v in unique_vals_df.iloc[:, 0].dropna().unique():
+                        try:
+                            options_int.append(int(v))
+                        except (ValueError, TypeError):
+                            pass # Ignora valores não-numéricos
+                    
+                    col_info['options'] = sorted(options_int)
+
+                # Se não for 'CÓD.', continuamos com a lógica de tipos
+                elif pd.api.types.is_numeric_dtype(dtype):
+                    # Esta parte agora só executa se NÃO for uma coluna 'CÓD.'
+                    min_max_df = pd.read_sql(f'SELECT MIN("{original_col}"), MAX("{original_col}") FROM "{table_name}"', engine)
+                    col_info['type'] = 'numeric'
+                    col_info['min'] = int(np.floor(min_max_df.iloc[0, 0] if pd.notnull(min_max_df.iloc[0, 0]) else 0))
+                    col_info['max'] = int(np.ceil(min_max_df.iloc[0, 1] if pd.notnull(min_max_df.iloc[0, 1]) else 0))
                 
                 elif pd.api.types.is_datetime64_any_dtype(dtype):
                     min_max_df = pd.read_sql(f'SELECT MIN("{original_col}"), MAX("{original_col}") FROM "{table_name}" WHERE "{original_col}" IS NOT NULL', engine)
@@ -135,12 +150,15 @@ def get_filter_metadata(table_name):
                     col_info['max'] = min_max_df.iloc[0, 1]
 
                 elif pd.api.types.is_object_dtype(dtype) or pd.api.types.is_categorical_dtype(dtype):
+                    # Esta parte agora só executa se NÃO começar com 'CÓD.'
                     unique_vals_df = pd.read_sql(f'SELECT DISTINCT "{original_col}" FROM "{table_name}" WHERE "{original_col}" IS NOT NULL ORDER BY "{original_col}" ASC LIMIT 1000', engine)
                     col_info['type'] = 'categorical'
                     col_info['options'] = unique_vals_df.iloc[:, 0].dropna().unique()
                 
                 else:
                     col_info['type'] = 'unsupported'
+                
+                # --- FIM DA CORREÇÃO ---
 
             except Exception as e:
                 st.warning(f"Não foi possível carregar metadados para filtro da coluna '{mapped_column}' ({original_col}): {e}")
@@ -153,18 +171,74 @@ def get_filter_metadata(table_name):
 
 def tratar_filtro_codigo(column: str, st_column_object, key_prefix: str, metadata: dict) -> None:
     """
-    Cria um filtro multiselect para colunas numéricas que representam códigos.
+    Cria um filtro de *digitação* (st.text_input) para colunas de código.
+    Permite que o usuário digite múltiplos valores separados por vírgula.
     """
     unique_values = metadata.get('options', [])
+    placeholder_text = f"Ex: {unique_values[0]}" if unique_values else "Digite códigos, ex: 11, 35, 53"
     
-    if not unique_values:
-        st_column_object.info(f"⚠️ Coluna de código '{column}' sem valores válidos para seleção.")
-        return
+    # Chave para o campo de texto (onde o usuário digita)
+    text_key = f"text_{key_prefix}"
+    
+    # Chave para a lista processada (que o 'build_query' usa)
+    list_key = f"multi_{key_prefix}"
 
-    st_column_object.multiselect(
-        f"Selecione os valores de {column}",
-        options=unique_values,
-        key=f"multi_{key_prefix}"
+    # Callback que será chamada QUANDO o usuário pressionar Enter no text_input
+    def process_text_and_reset_page():
+        # 1. Ler o valor do campo de texto
+        raw_text = st.session_state.get(text_key, "")
+        
+        if not raw_text:
+            st.session_state[list_key] = []
+        else:
+            # 2. Processar o texto (separar por vírgula, limpar, converter p/ int)
+            values = [val.strip() for val in raw_text.split(',') if val.strip()]
+            processed_values = []
+            for v in values:
+                try:
+                    # A metadata original convertia para int
+                    processed_values.append(int(v))
+                except ValueError:
+                    # Se o usuário digitar algo não-numérico, ignora
+                    pass 
+            
+            # 3. Salvar a lista processada na 'key' que a query espera
+            st.session_state[list_key] = processed_values
+        
+        # 4. Resetar a página (como os outros filtros fazem)
+        st.session_state.page = 1
+
+    # --- Lógica de Sincronização ---
+    # Isso garante que o campo de texto e a lista de filtros
+    # permaneçam sincronizados, especialmente após "Limpar Filtros"
+
+    current_list_value = st.session_state.get(list_key, [])
+    current_text_value = st.session_state.get(text_key, "")
+    
+    # Converte a lista atual (ex: [11, 35]) de volta para texto (ex: "11, 35")
+    text_from_list = ", ".join(map(str, current_list_value))
+
+    # Se o botão "Limpar Filtros" foi pressionado:
+    # A list_key é limpa (ex: "multi_..."), mas a text_key (ex: "text_...") não.
+    # Precisamos forçar a text_key a limpar também.
+    if not current_list_value and current_text_value:
+        st.session_state[text_key] = ""
+        current_text_value = "" # Atualiza a variável local
+    
+    # Se o estado de lista (text_from_list) for diferente do estado de texto
+    # (o que pode acontecer em recarregamentos), sincronize-os.
+    elif text_from_list != current_text_value:
+        st.session_state[text_key] = text_from_list
+        current_text_value = text_from_list
+
+    # --- Fim da Sincronização ---
+
+    st_column_object.text_input(
+        f"Digite os valores de {column} (separados por vírgula)",
+        key=text_key,
+        placeholder=placeholder_text,
+        on_change=process_text_and_reset_page,
+        # O valor default é controlado pela lógica de sincronização acima
     )
 
 def render_filter_widgets(table_name: str, metadata: dict, all_columns: list):
@@ -195,7 +269,8 @@ def render_filter_widgets(table_name: str, metadata: dict, all_columns: list):
                key.startswith(f"filter_") or \
                key.startswith("multi_") or \
                key.startswith("slider_") or \
-               key.startswith("date_"):
+               key.startswith("date_") or \
+               key.startswith("text_"):
                 keys_to_delete.append(key)
         
         for key in keys_to_delete:
