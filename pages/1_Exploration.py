@@ -44,6 +44,17 @@ def change_page(delta):
     st.session_state.page = max(1, st.session_state.page + delta)
 
 @st.cache_data(ttl=3600)
+def load_cached_metadata():
+    """
+    Função wrapper para carregar e cachear os metadados uma única vez.
+    Chama a função 'get_filter_metadata' importada.
+    """
+    metadata, all_columns, reverse_mapping = get_filter_metadata()
+    if metadata is None:
+        raise Exception("Não foi possível carregar os metadados da tabela. (get_filter_metadata retornou None)")
+    return metadata, all_columns, reverse_mapping
+
+@st.cache_data(ttl=3600)
 def load_paginated_data(query, params_tuple):
     engine = get_engine()
     params = dict(params_tuple)
@@ -107,9 +118,7 @@ def load_graph_data(columns: list, query_tuple: tuple, params_tuple: tuple, reve
 TABLE_NAME = "dados_enem_consolidado" 
 try:
     # 1. Carregar Metadados (FEITO UMA VEZ)
-    metadata, all_columns, reverse_mapping = get_filter_metadata() 
-    if metadata is None:
-        raise Exception("Não foi possível carregar os metadados da tabela.")
+    metadata, all_columns, reverse_mapping = load_cached_metadata() 
 
     # 2. Criar Abas
     tab_dados, tab_graficos = st.tabs(["📊 Tabela de Dados", "📈 Construtor de Gráficos"])
@@ -122,7 +131,10 @@ try:
         
         # 3a. Renderizar filtros para a TABELA
         # (Renderiza no container 'st', usa prefixo 'data')
-        render_filter_widgets(metadata, all_columns, container=st, unique_prefix="data")
+        
+        # --- AJUSTE 1 AQUI ---
+        # container=st mudado para container=tab_dados
+        render_filter_widgets(metadata, all_columns, container=tab_dados, unique_prefix="data")
         st.divider()
 
         # 4a. Construir as queries para PAGINAÇÃO
@@ -290,8 +302,10 @@ try:
             )
         
         # --- Filtros Independentes (prefixo 'graph') ---
-        with st.expander("🔎 2. Filtros do Gráfico"):
-            render_filter_widgets(metadata, all_columns, container=st, unique_prefix="graph")
+        # --- AJUSTE 2 AQUI ---
+        # Captura o objeto expander e o passa como contêiner
+        graph_filter_expander = st.expander("🔎 2. Filtros do Gráfico")
+        render_filter_widgets(metadata, all_columns, container=graph_filter_expander, unique_prefix="graph")
         
         st.divider()
 
