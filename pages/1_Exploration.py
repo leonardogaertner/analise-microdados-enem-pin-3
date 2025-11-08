@@ -1,9 +1,7 @@
 import streamlit as st
-import os
 import pandas as pd
 from sqlalchemy import create_engine
 import numpy as np
-from fpdf import FPDF
 import altair as alt
 
 # Importa os módulos refatorados
@@ -16,6 +14,8 @@ try:
         build_query_and_params
     )
     from Exploration import graph_utils as gu
+    from Exploration.pdf_utils import dataframe_to_pdf_bytes
+
 except ImportError:
     st.error("Erro ao carregar módulos. Verifique a estrutura de pastas 'Exploration'.")
     st.stop()
@@ -99,27 +99,6 @@ def load_graph_data(columns: list, query_tuple: tuple, params_tuple: tuple, reve
         st.code(query)
         st.code(params)
         return pd.DataFrame()
-
-# --- Função PDF (sem alterações) ---
-def dataframe_to_pdf_bytes(df: pd.DataFrame) -> bytes:
-    pdf = FPDF(orientation="L", unit="mm", format="A4")
-    pdf.add_page()
-    pdf.set_font("Arial", size=8) 
-    df_str = df.fillna('N/A').astype(str)
-    num_cols = len(df_str.columns)
-    page_width = pdf.w - 2 * pdf.l_margin
-    col_width = page_width / num_cols
-    line_height = pdf.font_size * 2
-    pdf.set_font(family=pdf.font_family, style="B", size=pdf.font_size)
-    for col in df_str.columns:
-        pdf.cell(col_width, line_height, col, border=1, align='C') 
-    pdf.ln(line_height)
-    pdf.set_font(family=pdf.font_family, style="", size=pdf.font_size)
-    for _, row in df_str.iterrows():
-        for col in df_str.columns:
-            pdf.cell(col_width, line_height, row[col], border=1, align='L')
-        pdf.ln(line_height)
-    return pdf.output(dest='S').encode('latin-1')
 
 # ===================================================================
 # BLOCO PRINCIPAL DE EXECUÇÃO
