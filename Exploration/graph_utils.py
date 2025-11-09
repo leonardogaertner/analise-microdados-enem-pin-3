@@ -1,4 +1,4 @@
-# Exploration/graph_utils.py (Versão Validada)
+# Exploration/graph_utils.py (Versão Corrigida)
 
 import altair as alt
 import pandas as pd
@@ -6,18 +6,15 @@ import pandas as pd
 # ===================================================================
 # PASSO 1: MAPEAMENTO DE COLUNAS POR TIPO DE DADO
 # ===================================================================
-# Esta função é a "fonte da verdade" para a interface.
-# Baseada nos dicionários e scripts do banco de dados.
 
 def get_column_lists():
     """
     Retorna um dicionário com as listas de colunas (nomes amigáveis) 
     categorizadas por tipo de dado para uso nos gráficos.
-    (Esta função foi ATUALIZADA e VALIDADA)
+    (AJUSTADO para remover colunas calculadas quebradas)
     """
     
-    # 🔢 QUANTITATIVO (Contínuo): Variáveis numéricas que podem ser agregadas
-    # Usadas em: Histograma (X), Boxplot (Y), Scatter (X, Y), Bar/Line (Y)
+    # ... (quantitative_cols permanece o mesmo) ...
     quantitative_cols = [
         "Média Geral",
         "Média Questões Objetivas",
@@ -34,7 +31,6 @@ def get_column_lists():
     ]
 
     # 🏷️ QUALITATIVO (Nominal e Ordinal): Categorias, grupos, tags
-    # Usadas em: Bar/Line (X, Cor), Boxplot (X), Scatter (Cor), Histograma (Cor)
     qualitative_cols = [
         # --- Nominais (Categorias) ---
         "Adulto?",
@@ -50,11 +46,15 @@ def get_column_lists():
         "UF Entidade Certificação",
         "Sigla da UF da Escola",
         "Sigla da UF da Prova",
-        "Tipo da Escola", # (TIPO_ESCOLA_AGRUPADO)
+        
+        # "Tipo da Escola", # <-- REMOVIDA (Coluna TIPO_ESCOLA_AGRUPADO que está NULA no banco)
+        
         "Cor/Raça",
         "Tipo de Dependência Administrativa da Escola",
         "Tipo de Ensino",
-        "Tipo de Escola", # (TP_ESCOLA)
+        
+        "Tipo de Escola", # <-- MANTIDA (Coluna TP_ESCOLA, numérica, que está FUNCIONANDO)
+        
         "Estado Civil",
         "Tipo de Língua",
         "Localização da Escola",
@@ -70,23 +70,19 @@ def get_column_lists():
         "Certificado?",
         
         # --- Ordinais (Categorias com Ordem) ---
-        # Tratadas como qualitativas para fins de visualização
         "Escolaridade dos Pais",
         "Acesso à Tecnologia",
         "Renda Familiar",
-        "Faixa Etária", # <-- Validado como Qualitativo/Ordinal
+        "Faixa Etária",
     ]
 
-    # ⏳ TEMPORAL: Anos ou datas
-    # Usadas em: Line (X), Bar (X)
+    # ... (temporal_cols e id_cols permanecem os mesmos) ...
     temporal_cols = [
         "Ano",
         "Ano de Conclusão",
         "Tempo Fora da Escola",
     ]
 
-    # 🆔 IDENTIFICADOR: Úteis para contagens
-    # Usadas em: Bar/Line (Y, com agregação 'Contagem')
     id_cols = [
         "Nº de Inscrição",
         "Cód. Município Escola",
@@ -104,16 +100,14 @@ def get_column_lists():
         "quantitative": sorted(quantitative_cols),
         "qualitative": sorted(qualitative_cols),
         "temporal": sorted(temporal_cols),
-        "id_for_count": sorted(id_cols) # Ordenado para consistência
+        "id_for_count": sorted(id_cols)
     }
 
 
 # ===================================================================
 # PASSO 2: FUNÇÕES DE GERAÇÃO DE GRÁFICOS (ALTAIR)
 # ===================================================================
-# Estas funções recebem os nomes das colunas (amigáveis) e criam os gráficos
-# (O restante do arquivo permanece inalterado, pois a lógica de 
-# criação dos gráficos já estava correta.)
+# (O restante do arquivo não precisa de alterações)
 
 def create_scatter_plot(df: pd.DataFrame, x_col: str, y_col: str, color_col: str = None):
     """Gera um gráfico de dispersão (Quantitativo vs Quantitativo)."""
