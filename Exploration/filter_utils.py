@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from . import column_config as cc
 from .db_utils import get_engine, TABLE_NAME
+from .filter_config import TYPE_OVERRIDES
 
 # ===================================================================
 # (get_filter_metadata e tratar_filtro_codigo NÃO MUDARAM)
@@ -63,6 +64,17 @@ def get_filter_metadata():
             except Exception as e:
                 st.warning(f"Não foi possível carregar metadados para '{mapped_column}': {e}")
                 col_info['type'] = 'unsupported'
+            # Ajuste para converter o tipo de filtro se for necessário    
+            override_type = TYPE_OVERRIDES.get(mapped_column)
+            if override_type == "categorical" and col_info.get("type") != "categorical":
+                unique_vals_df = pd.read_sql(
+                    f'SELECT DISTINCT "{original_col}" FROM "{TABLE_NAME}" '
+                    f'WHERE "{original_col}" IS NOT NULL '
+                    f'ORDER BY "{original_col}" ASC LIMIT 1000', engine
+                )
+                col_info["type"] = "categorical"
+                col_info["options"] = unique_vals_df.iloc[:, 0].dropna().unique()
+            # Fim do ajuste do tipo de filtro
             metadata[mapped_column] = col_info
     return metadata, all_mapped_columns, reverse_mapping
 
@@ -205,7 +217,7 @@ def render_filter_widgets(metadata: dict, all_columns: list, container=st, uniqu
             unique_values = col_info.get('options', [])
             if len(unique_values) == 0: continue
             widget_container.multiselect(
-                f"Valores de {column}",
+                f"{column}",
                 unique_values, key=f"multi_{key_prefix}", on_change=reset_page_filter
             )
         else:
