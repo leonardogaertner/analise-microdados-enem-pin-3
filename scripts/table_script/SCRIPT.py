@@ -1,13 +1,8 @@
 import pandas as pd
 from sqlalchemy import create_engine, text, types
 import unicodedata
-try:
-    import psycopg
-except Exception as _e:
-    raise ImportError("The 'psycopg' package is required by SQLAlchemy for the 'psycopg' dialect.\n"
-                      "Install it for this Python interpreter (example):\n"
-                      "  python -m pip install psycopg[binary] --upgrade\n"
-                      "Then re-run the script with the same python executable that installed the package.")
+# --- Bloco de import do psycopg REMOVIDO ---
+# SQLAlchemy cuidará da importação do driver
 import time
 import glob
 from io import StringIO
@@ -88,7 +83,7 @@ def aplicar_regras_de_negocio(df, ano):
         df['Q007'] = None
 
     map_regiao = { 'AC': 'Norte', 'AP': 'Norte', 'AM': 'Norte', 'PA': 'Norte', 'RO': 'Norte', 'RR': 'Norte', 'TO': 'Norte', 'AL': 'Nordeste', 'BA': 'Nordeste', 'CE': 'Nordeste', 'MA': 'Nordeste', 'PB': 'Nordeste', 'PE': 'Nordeste', 'PI': 'Nordeste', 'RN': 'Nordeste', 'SE': 'Nordeste', 'DF': 'Centro-Oeste', 'GO': 'Centro-Oeste', 'MT': 'Centro-Oeste', 'MS': 'Centro-Oeste', 'ES': 'Sudeste', 'MG': 'Sudeste', 'RJ': 'Sudeste', 'SP': 'Sudeste', 'PR': 'Sul', 'RS': 'Sul', 'SC': 'Sul' }
-    map_capitais = { 'AC': 'Rio Branco', 'AL': 'Maceió', 'AP': 'Macapá', 'AM': 'Manaus', 'BA': 'Salvador', 'CE': 'Fortaleza', 'DF': 'Brasília', 'ES': 'Vitória', 'GO': 'Goiânia', 'MA': 'São Luís', 'MT': 'Cuiabá', 'MS': 'Campo Grande', 'MG': 'Belo Horizonte', 'PA': 'Belém', 'PB': 'João Pessoa', 'PR': 'Curitiba', 'PE': 'Recife', 'PI': 'Teresina', 'RJ': 'Rio de Janeiro', 'RN': 'Natal', 'RS': 'Porto Alegre', 'RO': 'Porto Velho', 'RR': 'Boa Vista', 'SC': 'Florianópolis', 'SP': 'São Paulo', 'SE': 'Aracaju', 'TO': 'Palmas' }
+    map_capitais = { 'AC': 'Rio Branco', 'AL': 'Maceió', 'AP': 'Macapá', 'AM': 'Manaus', 'BA': 'Salvador', 'CE': 'Fortaleza', 'DF': 'Brasília', 'ES': 'Vitória', 'GO': 'Goiânia', 'MA': 'São Luís', 'MT': 'Cuiabá', 'MS': 'Campo Grande', 'MG': 'Belo Horizonte', 'PA': 'Belém', 'PB': 'João Pessoa', 'PR': 'Curitiba', 'PE': 'Recife', 'PI': 'Teresina', 'RJ': 'Rio de Janeiro', 'RN': 'Natal', 'RS': 'Porto Alegre', 'RO': 'Porto Velho', 'RR': 'Boa Vista', 'SC': 'Florinópolis', 'SP': 'São Paulo', 'SE': 'Aracaju', 'TO': 'Palmas' }
     map_renda = { 'A': 'Nenhuma renda', 'B': 'Até 1 salário mínimo', 'C': 'De 1 a 1,5 salários mínimos', 'D': 'De 1,5 a 2 salários mínimos', 'E': 'De 2 a 2,5 salários mínimos', 'F': 'De 2,5 a 3 salários mínimos', 'G': 'De 3 a 4 salários mínimos', 'H': 'De 4 a 5 salários mínimos', 'I': 'De 5 a 6 salários mínimos', 'J': 'De 6 a 7 salários mínimos', 'K': 'De 7 a 8 salários mínimos', 'L': 'De 8 a 9 salários mínimos', 'M': 'De 9 a 10 salários mínimos', 'N': 'De 10 a 12 salários mínimos', 'O': 'De 12 a 15 salários mínimos', 'P': 'De 15 a 20 salários mínimos', 'Q': 'Mais de 20 salários mínimos' }
     map_escolaridade = { 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'E': 5, 'F': 6, 'G': 7, 'H': 8 }
     map_escolaridade_reverso = { 1: 'Nunca estudou', 2: 'Não completou a 4ª série/5º ano', 3: 'Completou a 4ª série/5º ano', 4: 'Completou a 8ª série/9º ano', 5: 'Completou o Ensino Médio', 6: 'Completou a Faculdade', 7: 'Completou a Pós-graduação', 8: 'Não sabe' }
@@ -147,7 +142,7 @@ def aplicar_regras_de_negocio(df, ano):
 
     if 'Q001' in df.columns and 'Q002' in df.columns:
         q001_num = df['Q001'].map(map_escolaridade).astype('Float64')
-        q002_num = df['Q002'].map(map_escolaridade).astype('Float64')
+        q002_num = df['Q002'].map(map_escolaridade).astype('Float64') # Corrigido para Float64
         max_escolaridade_num = np.nanmax([q001_num, q002_num], axis=0)
         df['ESCOLARIDADE_PAIS_AGRUPADO'] = pd.Series(max_escolaridade_num, index=df.index).map(map_escolaridade_reverso)
         df['ESCOLARIDADE_PAIS_AGRUPADO'] = df['ESCOLARIDADE_PAIS_AGRUPADO'].fillna('Não informado')
@@ -220,6 +215,7 @@ def criar_tabela_municipios_do_ibge(engine):
         except FileNotFoundError:
             print(f"ERRO DE ARQUIVO: O arquivo '{nome_arquivo_xls}' não foi encontrado na pasta do script.")
             print(f"Caminho completo verificado: {caminho_arquivo_xls}")
+            print("Por favor, adicione o arquivo a esta pasta e execute novamente.")
             return False
         except ImportError:
             print("ERRO DE IMPORTAÇÃO: A biblioteca 'xlrd' é necessária para ler arquivos .xls (Excel 97-2003).")
@@ -340,7 +336,7 @@ def analisar_relacionamentos_municipios(engine, nome_tabela_microdados):
                     for chave_micro in chaves_microdados_possiveis:
                         if chave_micro in set_microdados:
                             print(f"  - Relacionamento Lógico Encontrado:")
-                            print(f"    '{nome_tabela_municipios}'.{chave_mun}  ->  '{nome_tabela_microdados}'.{chave_micro}")
+                            print(f"     '{nome_tabela_municipios}'.{chave_mun}  ->  '{nome_tabela_microdados}'.{chave_micro}")
                             relacionamentos_encontrados = True
 
             if not relacionamentos_encontrados and not colunas_comuns:
@@ -355,20 +351,118 @@ def analisar_relacionamentos_municipios(engine, nome_tabela_microdados):
 # --- FIM: FUNÇÕES DA FASE 4 ---
 
 
+# --- INÍCIO: FUNÇÃO DA FASE 5 (AJUSTADA V5) ---
+
+def criar_tabela_dicionario(engine):
+    """
+    Carrega a tabela 'dicionario_enem'
+    a partir do arquivo local.
+    Baseado na instrução do usuário (v5), procura por 'Dicionário.xlsx'
+    e o lê como um arquivo Excel.
+    A validação de colunas foi removida.
+    """
+    nome_tabela_dicionario = 'dicionario_enem'
+    
+    # --- NOME DO ARQUIVO AJUSTADO (conforme solicitação explícita do usuário) ---
+    nome_arquivo_dicionario = "Dicionário.xlsx" 
+    
+    # Usa a variável global 'script_dir' definida no início do script
+    caminho_arquivo = os.path.join(script_dir, nome_arquivo_dicionario)
+    
+    print(f"\n--- FASE 5: Carga da Tabela de Dicionário ---")
+    print(f"Lendo arquivo: {caminho_arquivo}")
+
+    df_dicionario = None
+    
+    try:
+        try:
+            # --- LÓGICA DE LEITURA AJUSTADA ---
+            # Tenta ler diretamente como Excel (requer 'openpyxl')
+            print(" 1. Tentando ler como arquivo Excel (Dicionário.xlsx)...")
+            df_dicionario = pd.read_excel(caminho_arquivo, sheet_name=0)
+            print("    ... Sucesso (lido como Excel).")
+        
+        except FileNotFoundError:
+            # Lança a exceção para ser capturada pelo 'except FileNotFoundError' externo
+            raise FileNotFoundError
+        
+        except Exception as e_excel:
+            print(f"    ... Falha ao ler como Excel: {e_excel}")
+            # Adiciona verificação de biblioteca (openpyxl para .xlsx)
+            if "support for the file format" in str(e_excel) or "'openpyxl'" in str(e_excel):
+                print("    AVISO: Verifique se a biblioteca correta para ler .xlsx está instalada.")
+                print("    Execute: pip install openpyxl")
+            # Lança a exceção para ser capturada pelo 'except Exception as e' externo
+            raise e_excel 
+        
+        # --- FIM DA LÓGICA DE LEITURA ---
+
+        if df_dicionario is None or df_dicionario.empty:
+            print("Arquivo do dicionário lido, mas está vazio.")
+            return False
+
+        print(f"Dados lidos ({len(df_dicionario)} linhas). Carregando para o banco...")
+
+        # Normaliza os nomes das colunas (ex: 'questao' -> 'QUESTAO')
+        df_dicionario.columns = [normalize_col_name(col) for col in df_dicionario.columns]
+        
+        # --- BLOCO DE VALIDAÇÃO DE COLUNAS REMOVIDO (conforme solicitação) ---
+        # O script não vai mais checar por 'QUESTAO', 'RESPOSTA', 'DESCRICAO'
+        print(f"Colunas encontradas e normalizadas: {list(df_dicionario.columns)}")
+        # --- FIM DA REMOÇÃO ---
+
+        # Conecta e sobe os dados
+        with engine.connect() as connection:
+            connection.execute(text(f'DROP TABLE IF EXISTS "{nome_tabela_dicionario}" CASCADE;'))
+            df_dicionario.to_sql(
+                nome_tabela_dicionario,
+                con=connection,
+                if_exists='replace',
+                index=False
+            )
+            connection.commit()
+        
+        print(f"Sucesso: Tabela '{nome_tabela_dicionario}' criada no banco a partir do arquivo.")
+        return True # Retorna sucesso
+
+    except FileNotFoundError: # Captura a FileNotFoundError de pd.read_excel
+        print(f"ERRO DE ARQUIVO: O arquivo '{nome_arquivo_dicionario}' não foi encontrado na pasta do script.")
+        print(f"Caminho completo verificado: {caminho_arquivo}")
+        return False
+    except Exception as e:
+        print(f"ERRO na FASE 5: Falha ao processar o arquivo do dicionário. {e}")
+        traceback.print_exc()
+        return False # Retorna falha
+
+# --- FIM: FUNÇÃO DA FASE 5 (AJUSTADA V5) ---
+
+
 # --- SCRIPT PRINCIPAL ---
 if __name__ == "__main__":
     start_time_total = time.time()
-    engine = create_engine( DATABASE_URL, pool_size=10, max_overflow=15, pool_timeout=60, pool_pre_ping=True )
+    
+    # Adicionado pool_pre_ping=True para verificar conexões antes de usar
+    engine = create_engine(
+        DATABASE_URL, 
+        pool_size=10, 
+        max_overflow=15, 
+        pool_timeout=60, 
+        pool_pre_ping=True 
+    )
     
     # Busca arquivos CSV de microdados
     arquivos_csv = glob.glob(os.path.join(diretorio_csv, '*.csv'))
+    
     # Filtra para NÃO incluir o CSV de campos calculados
-    # Não precisa filtrar pelo .xls, pois o glob("*.csv") já o ignora
-    arquivos_csv = [f for f in arquivos_csv if 'Campos Calculados' not in f]
+    # E TAMBÉM NÃO incluir o CSV do Dicionário
+    # (O Dicionário agora é .xlsx, então este filtro não o afetaria,
+    # mas mantemos a exclusão explícita por segurança)
+    arquivos_csv = [f for f in arquivos_csv if 'Campos Calculados' not in f and 'Dicionário' not in f]
+
 
     if not arquivos_csv: 
         print(f"AVISO: Nenhum arquivo .csv de microdados (ENEM/PARTICIPANTES) encontrado em: {diretorio_csv}")
-        # Não usamos exit() para permitir que a FASE 4 rode mesmo assim
+        # Não usamos exit() para permitir que a FASE 4 e 5 rodem mesmo assim
     else:
         print("--- FASE 1: Analisando cabeçalhos... ---")
         master_columns = set(campos_desejados); all_file_headers = {}
@@ -421,9 +515,9 @@ if __name__ == "__main__":
             try:
                 file_specific_header_normalized = all_file_headers.get(filename, [])
                 if not file_specific_header_normalized:
-                     print(f"  Aviso: Cabeçalho não lido na Fase 1 para {filename}. Lendo novamente.")
-                     raw_header = pd.read_csv(arquivo, encoding='latin1', sep=';', nrows=0, low_memory=False).columns
-                     file_specific_header_normalized = [normalize_col_name(h) for h in raw_header]
+                        print(f"  Aviso: Cabeçalho não lido na Fase 1 para {filename}. Lendo novamente.")
+                        raw_header = pd.read_csv(arquivo, encoding='latin1', sep=';', nrows=0, low_memory=False).columns
+                        file_specific_header_normalized = [normalize_col_name(h) for h in raw_header]
                 usecols_normalized = [col for col in file_specific_header_normalized if col in master_columns_list]
                 try: # Tenta mapear de volta, pode falhar se o cabeçalho mudou ou teve erro na Fase 1
                     raw_header_map = {normalize_col_name(h): h for h in pd.read_csv(arquivo, encoding='latin1', sep=';', nrows=0, low_memory=False).columns}
@@ -432,8 +526,8 @@ if __name__ == "__main__":
                         print("   Aviso: Mapeamento de colunas falhou, lendo todas as colunas.")
                         usecols_original = None
                 except Exception as map_err:
-                     print(f"   Aviso: Erro ao mapear colunas para leitura otimizada ({map_err}), lendo todas as colunas.")
-                     usecols_original = None
+                        print(f"   Aviso: Erro ao mapear colunas para leitura otimizada ({map_err}), lendo todas as colunas.")
+                        usecols_original = None
 
                 reader = pd.read_csv( arquivo, encoding='latin1', sep=';', chunksize=chunk_size, low_memory=False, usecols=usecols_original )
                 for i, chunk in enumerate(reader):
@@ -452,33 +546,33 @@ if __name__ == "__main__":
 
                         # --- INÍCIO DA LÓGICA DE COERÇÃO REFINADA ---
                         for col, sql_type in tipos_de_dados_sql.items():
-                             if col in chunk_alinhado.columns:
-                                try:
-                                    # Trata tipos numéricos (NUMERIC, FLOAT, INTEGER, BIGINT)
-                                    if isinstance(sql_type, (types.NUMERIC, types.FLOAT, types.INTEGER, types.BIGINT)):
-                                        # 1. Substitui strings vazias por NaN ANTES de coagir
-                                        chunk_alinhado.loc[chunk_alinhado[col] == '', col] = np.nan
+                                if col in chunk_alinhado.columns:
+                                    try:
+                                        # Trata tipos numéricos (NUMERIC, FLOAT, INTEGER, BIGINT)
+                                        if isinstance(sql_type, (types.NUMERIC, types.FLOAT, types.INTEGER, types.BIGINT)):
+                                            # 1. Substitui strings vazias por NaN ANTES de coagir
+                                            chunk_alinhado.loc[chunk_alinhado[col] == '', col] = np.nan
+                                            
+                                            # 2. Coage para numérico, transformando outros erros em NaN
+                                            numeric_series = pd.to_numeric(chunk_alinhado[col], errors='coerce')
+
+                                            # 3. Atribui de volta baseado no tipo SQL específico
+                                            if isinstance(sql_type, (types.INTEGER, types.BIGINT)):
+                                                chunk_alinhado[col] = numeric_series.astype('Int64') # Usa Int64 que suporta nulos (NaN)
+                                            else: # NUMERIC, FLOAT
+                                                chunk_alinhado[col] = numeric_series # Deixa como float64
                                         
-                                        # 2. Coage para numérico, transformando outros erros em NaN
-                                        numeric_series = pd.to_numeric(chunk_alinhado[col], errors='coerce')
+                                        # Trata tipos string (VARCHAR, TEXT)
+                                        elif isinstance(sql_type, (types.VARCHAR, types.TEXT)):
+                                            # Converte para string, substitui nulos/vazios por None
+                                            chunk_alinhado[col] = chunk_alinhado[col].astype(str).replace('<NA>', None).replace('nan', None).replace('', None)
 
-                                        # 3. Atribui de volta baseado no tipo SQL específico
-                                        if isinstance(sql_type, (types.INTEGER, types.BIGINT)):
-                                            chunk_alinhado[col] = numeric_series.astype('Int64') # Usa Int64 que suporta nulos (NaN)
-                                        else: # NUMERIC, FLOAT
-                                            chunk_alinhado[col] = numeric_series # Deixa como float64
-                                    
-                                    # Trata tipos string (VARCHAR, TEXT)
-                                    elif isinstance(sql_type, (types.VARCHAR, types.TEXT)):
-                                        # Converte para string, substitui nulos/vazios por None
-                                        chunk_alinhado[col] = chunk_alinhado[col].astype(str).replace('<NA>', None).replace('nan', None).replace('', None)
+                                        # Adicione outros tipos se necessário
+                                        # else: pass
 
-                                    # Adicione outros tipos se necessário
-                                    # else: pass
-
-                                except Exception as coerc_e:
-                                    print(f"\n   Alerta de Coerção inesperado na coluna '{col}': {coerc_e}. Forçando None.")
-                                    chunk_alinhado[col] = None
+                                    except Exception as coerc_e:
+                                        print(f"\n   Alerta de Coerção inesperado na coluna '{col}': {coerc_e}. Forçando None.")
+                                        chunk_alinhado[col] = None
                         # --- FIM DA LÓGICA DE COERÇÃO REFINADA ---
 
                         print(f"  Chunk {i+1}: {len(chunk_alinhado)} linhas. Processando e convertendo tipos...", end="", flush=True)
@@ -487,7 +581,11 @@ if __name__ == "__main__":
                         end_time_chunk = time.time(); rows_in_file += len(chunk_alinhado); total_rows_processed += len(chunk_alinhado)
                         print(f" OK. ({end_time_chunk - start_time_chunk:.2f}s)")
                     except Exception as e_chunk: print(f"\n  Falha no chunk {i+1} de {filename}: {str(e_chunk)}"); traceback.print_exc(); print(f"  Pulando chunk {i+1}.")
+                
+                # --- ESTA É A LINHA CORRIGIDA ---
+                # Ela foi movida para dentro do bloco 'try' (indentada)
                 end_time_file = time.time(); print(f"  Arquivo {filename} ({rows_in_file} linhas) processado em {end_time_file - start_time_file:.2f}s.")
+            
             except Exception as e_file: print(f"\n  Falha ao processar {filename}: {str(e_file)}"); traceback.print_exc(); print(f"  Pulando {filename}.")
 
         end_time_total = time.time(); print(f"\nProcessamento concluído em {end_time_total - start_time_total:.2f}s.")
@@ -503,11 +601,11 @@ if __name__ == "__main__":
             with engine.connect() as connection:
                 total_db_rows = connection.execute(text(f'SELECT COUNT(*) FROM "{nome_tabela}";')).scalar_one()
                 if total_db_rows > 0:
-                     print(f"Contagem total na tabela '{nome_tabela}': {total_db_rows}")
-                     df_verificacao = pd.read_sql_query(text(f'SELECT "NU_ANO", COUNT(*) as total_registros FROM "{nome_tabela}" GROUP BY "NU_ANO" ORDER BY "NU_ANO";'), connection)
-                     print("Contagem por ano:"); print(df_verificacao.to_string(index=False))
+                        print(f"Contagem total na tabela '{nome_tabela}': {total_db_rows}")
+                        df_verificacao = pd.read_sql_query(text(f'SELECT "NU_ANO", COUNT(*) as total_registros FROM "{nome_tabela}" GROUP BY "NU_ANO" ORDER BY "NU_ANO";'), connection)
+                        print("Contagem por ano:"); print(df_verificacao.to_string(index=False))
                 else: 
-                     print(f"Tabela '{nome_tabela}' criada, mas vazia (0 registros). Verifique logs.")
+                        print(f"Tabela '{nome_tabela}' criada, mas vazia (0 registros). Verifique logs.")
         except Exception as e: 
             print(f"Erro ao verificar dados da tabela '{nome_tabela}': {e}")
     else:
@@ -531,6 +629,11 @@ if __name__ == "__main__":
          print(f"\n--- FASE 4B: Pula Análise de Relacionamentos (Tabela '{nome_tabela}' não foi carregada) ---")
     
     # --- FIM DA NOVA LÓGICA ADICIONADA ---
+
+    # --- INÍCIO DA ADIÇÃO (FASE 5) ---
+    # Tenta carregar a tabela de dicionário
+    criar_tabela_dicionario(engine)
+    # --- FIM DA ADIÇÃO (FASE 5) ---
 
     engine.dispose(); print("Pool de conexões liberado.")
 
