@@ -66,26 +66,26 @@ def train_model(X_train, y_train):
 
     return model
 
+
 def metrics(model, X_test, y_test, X_columns):
     """
         Avaliação das métricas do modelo e apresentação das importância das features
+
+        @param model: modelo treinado
+        @param X_test: conjunto de teste
+        @param y_test: rótulos reais do conjunto de teste
+        @param X_columns: nomes das colunas de entrada
     """
     y_pred = model.predict(X_test)
 
     print("Accuracy:", accuracy_score(y_test, y_pred))
     print(classification_report(y_test, y_pred, zero_division=0))
 
-    # Importancia das variáveis (Mostra as 30 mais importantes)
-    # Use o parâmetro X_columns — não X.columns
-    if hasattr(model, "best_estimator_"):
-        estimator = model.best_estimator_
-    else:
-        estimator = model
-
-    importances = pd.Series(estimator.feature_importances_, index=X_columns)
+    #Importancia das variáveis (Mostra as 30 mais importantes)
+    importances = pd.Series(model.best_estimator_.feature_importances_, index=X.columns)
     print(importances.sort_values(ascending=False).head(30))
 
-    # Visualização
+    #Visualização 
     importances.sort_values(ascending=True).tail(15).plot(kind="barh")
 
 def save_model(model, target_col):
@@ -99,41 +99,13 @@ def save_model(model, target_col):
     joblib.dump(model.best_estimator_, model_filename)
     print(f"Modelo salvo com sucesso em: {model_filename}")
 
-# --- NOVA FUNÇÃO: SALVAR IMPORTÂNCIA DAS FEATURES ---
-def save_feature_importances(model, X_columns, target_col):
-    """
-    Extrai a importância das features do modelo treinado e salva em um CSV.
-    Funciona tanto se `model` for RandomizedSearchCV quanto um estimator.
-    """
-    save_dir = "./saved_model"
-    os.makedirs(save_dir, exist_ok=True)
-
-    # obtém o estimador final
-    if hasattr(model, "best_estimator_"):
-        estimator = model.best_estimator_
-    else:
-        estimator = model
-
-    # checa se o estimador tem feature_importances_
-    if not hasattr(estimator, "feature_importances_"):
-        print("O estimador não possui atributo 'feature_importances_'; não é um modelo baseado em árvores.")
-        return
-
-    importances = pd.Series(estimator.feature_importances_, index=X_columns)
-    df_importances = importances.sort_values(ascending=False).reset_index()
-    df_importances.columns = ['Feature', 'Importance']
-
-    csv_filename = os.path.join(save_dir, f"feature_importances_{target_col}.csv")
-    df_importances.to_csv(csv_filename, index=False)
-    print(f"Importâncias salvas com sucesso em: {csv_filename}")
-
 
 if __name__ == "__main__":
     #Loading Dados
     df = load_data()
 
     #Coluna de Treinamento
-    target_col = "NU_NOTA_REDACAO"
+    target_col = "NU_NOTA_MT"
     print(df[target_col].value_counts())
 
     #Listas de colunas (target_col)
@@ -145,27 +117,11 @@ if __name__ == "__main__":
     #Divisão de 80% treino e 20% teste
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
-    # --- NOVO CAMINHO PARA SALVAR OS DADOS DE TESTE ---
-    SAVE_DIR_APP = "./saved_model"
-    os.makedirs(SAVE_DIR_APP, exist_ok=True)
-
-    # Salva X_test
-    X_test_path = os.path.join(SAVE_DIR_APP, "analyzer_X_test.csv")
-    X_test.to_csv(X_test_path, index=False)
-
-    # Salva y_test
-    y_test_path = os.path.join(SAVE_DIR_APP, "analyzer_y_test.csv")
-    y_test.to_csv(y_test_path, index=False)
-
-    print(f"Arquivos de teste salvos com sucesso em: {SAVE_DIR_APP}")
-    # Treinamento
+    #Treinamento
     model = train_model(X_train, y_train)
 
-    # Salva importâncias das features
-    save_feature_importances(model, X.columns, target_col)
+    #Metricas
+    metrics(model, X_test, y_test, X.columns)   
 
-    # Métricas
-    metrics(model, X_test, y_test, X.columns)
-
-    # Salvar Modelo
+    #Salvar Modelo
     save_model(model, target_col)

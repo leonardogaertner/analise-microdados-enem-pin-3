@@ -212,6 +212,3 @@ __marimo__/
 
 #Ignorar os Scripts Temporarios 
 scripts/Script/
-
-#Ignora arquivo de resultado do modelo 
-prediction_module/src/saved_model/*.pkl
