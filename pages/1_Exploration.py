@@ -20,6 +20,11 @@ except ImportError:
     st.error("Erro ao carregar módulos. Verifique a estrutura de pastas 'Exploration'.")
     st.stop()
 
+# --- CORREÇÃO DO ERRO DE 5000 LINHAS ---
+# Isso permite que o Altair processe gráficos com mais de 5k linhas para gerar o PDF
+alt.data_transformers.disable_max_rows()
+# ---------------------------------------
+
 # --- INICIALIZAÇÃO OBRIGATÓRIA ---
 if 'page' not in st.session_state:
     st.session_state.page = 1
@@ -30,7 +35,6 @@ if 'page_size' not in st.session_state:
 st.set_page_config(layout="wide")
 
 # (Seu CSS e botão "Voltar" permanecem aqui)
-# st.markdown(""" ... (seu CSS) ... """)
 if st.button("Voltar", key="back_button"):
     st.switch_page("app.py")
 
@@ -99,6 +103,7 @@ def load_graph_data(columns: list, query_tuple: tuple, params_tuple: tuple, reve
     
     try:
         df = pd.read_sql_query(query, engine, params=params)
+        # Aumentei um pouco o limite de warning aqui também, caso precise
         if len(df) > 100000:
             st.info(f"Dados filtrados ({len(df):,} linhas) são muito grandes. Exibindo amostra de 100.000 linhas.")
             df = df.sample(100000, random_state=1)
@@ -130,10 +135,6 @@ try:
         st.header("Explorar Dados da Tabela")
         
         # 3a. Renderizar filtros para a TABELA
-        # (Renderiza no container 'st', usa prefixo 'data')
-        
-        # --- AJUSTE 1 AQUI ---
-        # container=st mudado para container=tab_dados
         render_filter_widgets(metadata, all_columns, container=tab_dados, unique_prefix="data")
         st.divider()
 
@@ -186,7 +187,6 @@ try:
                 st.info("Nenhuma coluna selecionada para exibição.")
             
             # 10a. Controles de Paginação 
-            # (O seu código original de paginação e botões vai aqui)
             if st.session_state.page_size == "Todos":
                 total_pages = 1
             else:
@@ -213,7 +213,6 @@ try:
                     st.rerun()
 
             with col2:
-                # Lógica do "CÓDIGO ANTIGO" (st.number_input)
                 page_input = st.number_input(
                     "Ir para pág.",
                     min_value=1,
@@ -232,8 +231,7 @@ try:
                     st.rerun()
 
             with col3:
-                # Lógica do "CÓDIGO ANTIGO" (st.selectbox)
-                page_size_options = [10, 25, 50, 100, "Todos"] # Simplificado da sua versão antiga
+                page_size_options = [10, 25, 50, 100, "Todos"]
                 
                 if st.session_state.page_size not in page_size_options:
                     page_size_options.append(st.session_state.page_size)
@@ -293,17 +291,15 @@ try:
             st.error(f"Erro ao carregar listas de colunas de graph_utils: {e}")
             st.stop()
         
-        # --- Configuração do Gráfico (MOVIGO PARA CÁ) ---
+        # --- Configuração do Gráfico ---
         with st.expander("⚙️ 1. Configurar Gráfico", expanded=True):
             graph_type = st.selectbox(
                 "Selecione o tipo de gráfico:",
                 ["Dispersão (Correlação)", "Barras (Comparação)", "Linha (Temporal)", "Histograma (Distribuição)", "Boxplot (Distribuição)"],
-                key="graph_type_selector" # Chave única
+                key="graph_type_selector"
             )
         
         # --- Filtros Independentes (prefixo 'graph') ---
-        # --- AJUSTE 2 AQUI ---
-        # Captura o objeto expander e o passa como contêiner
         graph_filter_expander = st.expander("🔎 2. Filtros do Gráfico")
         render_filter_widgets(metadata, all_columns, container=graph_filter_expander, unique_prefix="graph")
         
@@ -416,9 +412,33 @@ try:
                 if not df_graph.empty:
                     chart_generated = gu.create_boxplot(df_graph, x_axis, y_axis)
 
-        # 6b. Exibição do Gráfico
+        # 6b. Exibição do Gráfico e Botão de Download
         if chart_generated:
+            # 1. Exibe o gráfico na tela
             st.altair_chart(chart_generated, use_container_width=True)
+            
+            st.divider() # Uma linha para separar
+            
+            # 2. Tenta converter para PDF e criar o botão
+            try:
+                import vl_convert as vlc
+                
+                # Converte o gráfico (JSON) para PDF em memória
+                pdf_bytes = vlc.vegalite_to_pdf(chart_generated.to_json())
+                
+                # Cria o botão de download
+                st.download_button(
+                    label="📥 Baixar Gráfico como PDF",
+                    data=pdf_bytes,
+                    file_name="grafico_enem.pdf",
+                    mime="application/pdf",
+                    use_container_width=True # Deixa o botão largo igual ao da tabela
+                )
+                
+            except ImportError:
+                st.error("⚠️ Biblioteca 'vl-convert-python' não encontrada. Instale com: pip install vl-convert-python")
+            except Exception as e:
+                st.error(f"Erro ao gerar PDF do gráfico: {e}")
 
 except Exception as e:
     st.error(f"Erro ao carregar dados: {e}")

@@ -22,8 +22,8 @@ COLUMN_MAPPING = {
     "MEDIA_GERAL": "Média Geral", # numérico
     "MEDIA_OBJETIVAS": "Média Questões Objetivas", # numérico
     "NO_ENTIDADE_CERTIFICACAO": "Nome Entidade Certificação", # um ID na forma de Texto
-    "NO_MUNICIPIO_ESC": "Nome do Município da Escola", # numérico
-    "NO_MUNICIPIO_PROVA": "Nome do Município da Prova", # um ID na forma de Texto, um para cada estado do Brasil
+    "NOME_MUNICIPIO_ESC": "Nome do Município da Escola", # numérico
+    "NOME_MUNICIPIO_PROVA": "Nome do Município da Prova", # um ID na forma de Texto, um para cada estado do Brasil
     "NU_ANO": "Ano", # numérico, de 2014 até 2023
     "NU_INSCRICAO": "Nº de Inscrição", # Id, um para cada candidato
     "NU_NOTA_CH": "Nota de História", # numérico
