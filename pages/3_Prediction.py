@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import joblib
+import os
+from collections import OrderedDict
 
 # --- Estilo customizado ---
 st.markdown("""
@@ -28,6 +31,36 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("📈 Predição de Desempenho")
+
+# Mapa de saída
+MAP_RESULTADO = {0: "Baixo", 1: "Médio", 2: "Alto"}
+
+# Mapeamento dos tipos de prova (target_col)
+MAP_PROVAS = OrderedDict([
+    ("Matemática", "NU_NOTA_MT"),
+    ("Linguagens e Códigos", "NU_NOTA_LC"),
+    ("Ciências da Natureza", "NU_NOTA_CN"),
+    ("Ciências Humanas", "NU_NOTA_CH"),
+    ("Redação", "NU_NOTA_REDACAO"),
+])
+
+# Mapeamento das variáveis mais importantes para apresentação ao usuário
+MAP_TRADUCAO_VARIAVEIS = {
+    "Q006": "Renda familiar",
+    "TP_LINGUA": "Língua escolhida na prova de língua estrangeira",
+    "TP_FAIXA_ETARIA": "Faixa etária do candidato",
+    "Q005": "Quantidade de pessoas que moram na residência",
+    "Q024": "Possui computador na residência",
+    "RENDA_FAMILIAR": "Faixa de renda familiar (variável derivada)",
+    "NO_MUNICIPIO_PROVA": "Município de realização da prova",
+    "ESCOLARIDADE_PAIS_AGRUPADO": "Maior escolaridade entre os pais",
+    "TP_ANO_CONCLUIU": "Ano de conclusão do ensino médio",
+    "Q002": "Até que ano sua mãe/responsável estudou",
+    "INDICE_ACESSO_TECNOLOGIA": "Índice de acesso a tecnologia",
+    "TP_ESTADO_CIVIL": "Estado civil do candidato",
+    "NU_ANO": "Ano de realização da prova",
+    "SG_UF_PROVA": "UF de realização da prova"
+}
 
 # Mock de previsão
 def predict_notas(sexo=None, renda=None, esc_pai=None, esc_mae=None, escola=None, idade=None):
@@ -59,14 +92,63 @@ for k, v in default_values.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-# Tabs
-tab1, tab2 = st.tabs(["🎯 Simulação de Resultado", "📌 Variáveis Importantes"])
+# --- Função para carregar modelo e dados ---
+@st.cache_resource
+def load_main_model_and_data(target_col):
+    data = {}
+    base_path = "./prediction_module/src/saved_model"
+    os.makedirs(base_path, exist_ok=True)
 
-# ================= TAB 1 =================
+    model_filename = f"randomForest_{target_col}.pkl"
+    model_path = os.path.join(base_path, model_filename)
+    csv_x_path = os.path.join(base_path, "analyzer_X_test.csv")
+    csv_y_path = os.path.join(base_path, "analyzer_y_test.csv")
+
+    if os.path.exists(model_path):
+        data["main_model"] = joblib.load(model_path)
+    if os.path.exists(csv_x_path):
+        data["X_test"] = pd.read_csv(csv_x_path)
+    if os.path.exists(csv_y_path):
+        data["y_test"] = pd.read_csv(csv_y_path).squeeze()
+
+    importances_filename = f"feature_importances_{target_col}.csv"
+    importances_path = os.path.join(base_path, importances_filename)
+    if os.path.exists(importances_path):
+        data["importances"] = pd.read_csv(importances_path)
+    else:
+        raise FileNotFoundError(f"Arquivo de importâncias '{importances_filename}' não encontrado.")
+
+    data["target_col"] = target_col
+    return data
+
+# --- Tabs ---
+tab1, tab2, tab3 = st.tabs(["🎯 Simulação de Resultado", "📌 Variáveis Importantes", "🔬 Análise do Modelo Principal"])
+
+# Inicializa o seletor na primeira vez
+if 'prova_seletor' not in st.session_state:
+    st.session_state.prova_seletor = list(MAP_PROVAS.keys())[0]
+
+# Carrega dados apenas se não for "Geral"
+if st.session_state.prova_seletor != "Geral (todas as provas)":
+    target_col_selecionado = MAP_PROVAS[st.session_state.prova_seletor]
+    try:
+        analysis_data = load_main_model_and_data(target_col_selecionado)
+        st.toast(f"Dados de análise para {st.session_state.prova_seletor} carregados! 🎉", icon='✅')
+    except FileNotFoundError as e:
+        analysis_data = None
+        st.warning(f"Arquivos de modelo ou teste para {st.session_state.prova_seletor} não encontrados. {e}")
+    except Exception as e:
+        analysis_data = None
+        st.error(f"Erro inesperado no carregamento: {e}")
+else:
+    target_col_selecionado = None
+    analysis_data = None  # Evita carregar dados de uma prova específica
+
+selected_prova_nome = st.session_state.prova_seletor
+
+# --- TAB 1: Simulação de Resultado ---
 with tab1:
     st.info("Preencha os campos socioeconômicos e veja a previsão dinâmica de desempenho em cada área do ENEM.")
-
-    # --- Cards com métricas ---
     st.subheader("📊 Resultado da Predição")
     cards_placeholder = st.empty()
 
@@ -76,7 +158,6 @@ with tab1:
             for (area, nota), col in zip(st.session_state.notas.items(), cols):
                 col.metric(area, nota)
 
-    # Render inicial (sempre uma vez só)
     render_cards()
 
     # --- Formulário ---
@@ -84,44 +165,34 @@ with tab1:
     with st.form("prediction_form"):
         sexo = st.radio("Sexo", ["Masculino", "Feminino", "Prefiro não informar"],
                         horizontal=True, index=["Masculino", "Feminino", "Prefiro não informar"].index(st.session_state.sexo))
-
         idade = st.slider("Idade", 0, 100, st.session_state.idade)
-
         renda = st.radio("Renda Familiar", ["Até 1 SM", "1-3 SM", "3-5 SM", "Mais de 5 SM"],
-                        horizontal=True, index=["Até 1 SM", "1-3 SM", "3-5 SM", "Mais de 5 SM"].index(st.session_state.renda))
-
+                         horizontal=True,
+                         index=["Até 1 SM", "1-3 SM", "3-5 SM", "Mais de 5 SM"].index(st.session_state.renda))
         col1, col2 = st.columns(2)
         with col1:
-            esc_pai = st.select_slider(
-                "Escolaridade do Pai",
-                options=["Fundamental", "Ensino Médio", "Superior", "Pós-graduação", "Não informado"],
-                value=st.session_state.esc_pai
-            )
+            esc_pai = st.select_slider("Escolaridade do Pai",
+                                       options=["Fundamental", "Ensino Médio", "Superior", "Pós-graduação", "Não informado"],
+                                       value=st.session_state.esc_pai)
         with col2:
-            esc_mae = st.select_slider(
-                "Escolaridade da Mãe",
-                options=["Fundamental", "Ensino Médio", "Superior", "Pós-graduação", "Não informado"],
-                value=st.session_state.esc_mae
-            )
-
+            esc_mae = st.select_slider("Escolaridade da Mãe",
+                                       options=["Fundamental", "Ensino Médio", "Superior", "Pós-graduação", "Não informado"],
+                                       value=st.session_state.esc_mae)
         escola = st.radio("Tipo da Escola", ["Pública", "Privada", "Federal"],
-                        horizontal=True, index=["Pública", "Privada", "Federal"].index(st.session_state.escola))
-
+                          horizontal=True, index=["Pública", "Privada", "Federal"].index(st.session_state.escola))
         col1, col2 = st.columns(2)
         with col1:
             internet = st.radio("Possui acesso à Internet?", ["Sim", "Não"],
                                 horizontal=True, index=["Sim", "Não"].index(st.session_state.internet))
         with col2:
             computador = st.radio("Possui computador?", ["Sim", "Não"],
-                                horizontal=True, index=["Sim", "Não"].index(st.session_state.computador))
-
+                                  horizontal=True, index=["Sim", "Não"].index(st.session_state.computador))
         col1, col2 = st.columns(2)
         with col1:
             limpar = st.form_submit_button("🗑️ Limpar")
         with col2:
             submitted = st.form_submit_button("📊 Gerar Nova Previsão")
 
-    # --- Ações dos botões ---
     if submitted:
         st.session_state.update({
             "sexo": sexo,
@@ -134,7 +205,7 @@ with tab1:
             "computador": computador,
         })
         st.session_state.notas = predict_notas(sexo, renda, esc_pai, esc_mae, escola, idade)
-        render_cards()  # re-renderiza no mesmo placeholder
+        render_cards()
 
     if limpar:
         for k, v in default_values.items():
@@ -149,34 +220,134 @@ with tab1:
         "Nota Prevista": list(st.session_state.notas.values())
     })
     fig = px.bar(df_notas, x="Área", y="Nota Prevista", text="Nota Prevista",
-                color="Área", title="Notas Previstas por Área do ENEM")
+                 color="Área", title="Notas Previstas por Área do ENEM")
     fig.update_traces(textposition="outside")
     st.plotly_chart(fig, use_container_width=True)
 
-
-# ================= TAB 2 =================
+# --- TAB 2: Variáveis Importantes ---
 with tab2:
-    st.info("Veja as variáveis que mais impactam no resultado do modelo.")
+    st.subheader("📌 Importância das Variáveis")
+    options_for_tab2 = list(MAP_PROVAS.keys()) + ["Geral (todas as provas)"]
 
-    variaveis = [
-        {"nome": "Renda Familiar", "descricao": "A renda está fortemente relacionada ao acesso a materiais de estudo e cursos preparatórios."},
-        {"nome": "Tipo de Escola", "descricao": "Estudantes de escolas privadas, em média, têm acesso a mais recursos de aprendizagem."},
-        {"nome": "Escolaridade da Mãe", "descricao": "Pesquisas indicam que o nível de escolaridade da mãe tem alta correlação com o desempenho escolar."},
-        {"nome": "Sexo", "descricao": "Diferenças de desempenho entre homens e mulheres são observadas em algumas áreas do ENEM."},
-    ]
+    selected_prova_tab2 = st.selectbox(
+        "Selecione o Contexto de Análise:",
+        options=options_for_tab2,
+        index=options_for_tab2.index(st.session_state.prova_seletor),
+    )
 
-    cols = st.columns(2)
+    def traduzir_variavel(var):
+        return MAP_TRADUCAO_VARIAVEIS.get(var, var)
 
-    for i, var in enumerate(variaveis):
-        # Criar uma função dialog única para cada variável
-        @st.dialog(var["nome"])
-        def abrir_dialogo(v=var):
-            st.markdown(f"### {v['nome']}")
-            st.write(v["descricao"])
-            st.info("🔎 Aqui futuramente poderemos mostrar gráficos explicativos do impacto desta variável.")
-            # Exemplo de gráfico fake
-            st.bar_chart({"Impacto": np.random.randint(1, 100, size=5)})
+    if selected_prova_tab2 == "Geral (todas as provas)":
+        st.info("Mostrando a importância geral das variáveis considerando todas as provas.")
+        all_importances = []
+        for prova_nome, col_target in MAP_PROVAS.items():
+            try:
+                data_local = load_main_model_and_data(col_target)
+                df_imp = data_local["importances"].copy()
+                df_imp.rename(columns={"Importance": prova_nome}, inplace=True)
+                all_importances.append(df_imp)
+            except:
+                pass
 
-        with cols[i % 2]:
-            if st.button(var["nome"], use_container_width=True, key=f"btn_{i}"):
-                abrir_dialogo()
+        if all_importances:
+            df_merged = all_importances[0]
+            for df in all_importances[1:]:
+                df_merged = df_merged.merge(df, on="Feature", how="outer")
+
+            df_merged["MeanImportance"] = df_merged.iloc[:, 1:].mean(axis=1)
+            df_general = df_merged[["Feature", "MeanImportance"]].sort_values("MeanImportance", ascending=False).head(10)
+            df_general["Feature"] = df_general["Feature"].apply(traduzir_variavel)
+
+            fig = px.bar(
+                df_general.sort_values("MeanImportance", ascending=True),
+                x="MeanImportance",
+                y="Feature",
+                orientation="h",
+                title="Importância Geral das Variáveis (Média entre todos os modelos)",
+                labels={"MeanImportance": "Importância Média", "Feature": "Variável"},
+                color_discrete_sequence=px.colors.qualitative.Bold
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            st.dataframe(df_general.reset_index(drop=True))
+        else:
+            st.warning("Nenhuma importância pôde ser carregada para o contexto geral.")
+    else:
+        target_col = MAP_PROVAS[selected_prova_tab2]  # Atualiza a prova corretamente
+        try:
+            data_local = load_main_model_and_data(target_col)
+            df_importances = data_local["importances"].head(10).sort_values(by="Importance", ascending=True).copy()
+            df_importances["Feature"] = df_importances["Feature"].apply(traduzir_variavel)
+
+            fig = px.bar(
+                df_importances,
+                x="Importance",
+                y="Feature",
+                orientation='h',
+                title=f"Top 10 Importância das Variáveis para {selected_prova_tab2}",
+                labels={'Importance': 'Pontuação de Importância (Gini)', 'Feature': 'Variável'},
+                color_discrete_sequence=px.colors.qualitative.Bold
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            st.dataframe(df_importances.sort_values(by="Importance", ascending=False).reset_index(drop=True))
+        except Exception as e:
+            st.warning(f"Não foi possível carregar os dados de importâncias para {selected_prova_tab2}. {e}")
+
+# --- TAB 3: Análise do Modelo Principal ---
+with tab3:
+    st.subheader("🔬 Análise Exploratória do Modelo Principal")
+    provas_analise_exclusiva = [k for k in MAP_PROVAS.keys() if MAP_PROVAS[k]]
+
+    if selected_prova_nome not in provas_analise_exclusiva:
+        st.session_state.prova_seletor = provas_analise_exclusiva[0]
+        st.rerun()
+
+    st.selectbox(
+        "Selecione o Modelo de Prova para Análise:",
+        options=provas_analise_exclusiva,
+        index=provas_analise_exclusiva.index(selected_prova_nome),
+        key='prova_seletor_tab3',
+        on_change=st.rerun
+    )
+
+    if st.session_state.prova_seletor_tab3 != st.session_state.prova_seletor:
+        st.session_state.prova_seletor = st.session_state.prova_seletor_tab3
+        st.rerun()
+
+    st.info("Aqui usamos o modelo para fazer previsões de alunos reais do conjunto de teste.")
+    st.markdown(f"**Modelo Carregado:** `randomForest_{target_col_selecionado}.pkl` ({selected_prova_nome})")
+
+    if analysis_data and analysis_data.get("target_col") == target_col_selecionado:
+        if "main_model" not in analysis_data or "X_test" not in analysis_data or "y_test" not in analysis_data:
+            st.warning("Arquivos de modelo principal ou dados de teste não foram carregados. Verifique o diretório.")
+        else:
+            main_model = analysis_data["main_model"]
+            X_test_analyzer = analysis_data["X_test"]
+            y_test_analyzer = analysis_data["y_test"]
+
+            if st.button("Carregar Aluno Aleatório do Teste", use_container_width=True, key="btn_analise"):
+                rand_idx = np.random.randint(0, len(X_test_analyzer))
+                st.session_state.analyzer_idx = rand_idx
+                st.session_state.analyzer_col = target_col_selecionado
+
+            if "analyzer_idx" in st.session_state and st.session_state.get("analyzer_col") == target_col_selecionado:
+                idx = st.session_state.analyzer_idx
+                st.markdown(f"--- \n### 🧑‍🎓 Aluno Sorteado (Índice: {idx})")
+                aluno_x_data = X_test_analyzer.iloc[[idx]]
+                aluno_y_real_class = y_test_analyzer.iloc[idx]
+                aluno_y_pred_class = main_model.predict(aluno_x_data)[0]
+                pred_label = MAP_RESULTADO[aluno_y_pred_class]
+                real_label = MAP_RESULTADO[aluno_y_real_class]
+                cols = st.columns(2)
+                cols[0].metric("🎯 Predição do Modelo", pred_label)
+                cols[1].metric("✅ Resultado Real", real_label)
+                if pred_label == real_label:
+                    st.success("O modelo acertou a previsão!")
+                else:
+                    st.error("O modelo errou a previsão.")
+                st.markdown("--- \n#### Dados Completos do Aluno ")
+                st.dataframe(aluno_x_data.T)
+            elif "analyzer_idx" in st.session_state and st.session_state.get("analyzer_col") != target_col_selecionado:
+                st.warning(f"O modelo de previsão mudou para **{selected_prova_nome}**. Clique em **'Carregar Aluno Aleatório do Teste'** para rodar a previsão com o novo modelo.")
+    else:
+        st.error(f"Não foi possível carregar o modelo ou os dados de análise para a prova selecionada ({selected_prova_nome}).")
