@@ -44,6 +44,23 @@ MAP_PROVAS = OrderedDict([
     ("Redação", "NU_NOTA_REDACAO"),
 ])
 
+# Mapeamento das variáveis mais importantes para apresentação ao usuário
+MAP_TRADUCAO_VARIAVEIS = {
+    "Q006": "Renda familiar",
+    "TP_LINGUA": "Língua escolhida na prova de língua estrangeira",
+    "TP_FAIXA_ETARIA": "Faixa etária do candidato",
+    "Q005": "Quantidade de pessoas que moram na residência",
+    "Q024": "Possui computador na residência",
+    "RENDA_FAMILIAR": "Faixa de renda familiar (variável derivada)",
+    "NO_MUNICIPIO_PROVA": "Município de realização da prova",
+    "ESCOLARIDADE_PAIS_AGRUPADO": "Maior escolaridade entre os pais",
+    "TP_ANO_CONCLUIU": "Ano de conclusão do ensino médio",
+    "Q002": "Até que ano sua mãe/responsável estudou",
+    "INDICE_ACESSO_TECNOLOGIA": "Índice de acesso a tecnologia",
+    "TP_ESTADO_CIVIL": "Estado civil do candidato",
+    "NU_ANO": "Ano de realização da prova",
+    "SG_UF_PROVA": "UF de realização da prova"
+}
 
 # Mock de previsão
 def predict_notas(sexo=None, renda=None, esc_pai=None, esc_mae=None, escola=None, idade=None):
@@ -55,7 +72,6 @@ def predict_notas(sexo=None, renda=None, esc_pai=None, esc_mae=None, escola=None
         "Matemática": np.random.randint(400, 800),
         "Redação": np.random.randint(400, 1000),
     }
-
 
 # Inicializa session_state
 if "notas" not in st.session_state:
@@ -263,10 +279,24 @@ with tab2:
     st.info(
         f"O gráfico mostra as variáveis que o modelo de predição considerou mais importantes para prever o resultado **{selected_prova_nome}**.")
 
+    def traduzir_variavel(var):
+        return MAP_TRADUCAO_VARIAVEIS.get(var, var)
+
     if analysis_data and "importances" in analysis_data:
         top_n = 10
 
-        df_importances = analysis_data["importances"].head(top_n).sort_values(by="Importance", ascending=True)
+        df_importances = (
+            analysis_data["importances"]
+            .head(top_n)
+            .sort_values(by="Importance", ascending=True)
+            .copy()
+        )
+
+        # APLICAR A TRADUÇÃO SOMENTE NA COLUNA 'Feature'
+        if "Feature" in df_importances.columns:
+            df_importances["Feature"] = df_importances["Feature"].apply(traduzir_variavel)
+        else:
+            st.error("A coluna 'Feature' não existe em df_importances. Verifique o CSV.")
 
         fig = px.bar(
             df_importances,
@@ -280,14 +310,14 @@ with tab2:
         fig.update_layout(xaxis_title="Importância Relativa")
         st.plotly_chart(fig, use_container_width=True)
 
-        # Detalhamento em tabela
         st.markdown("---")
         st.markdown(f"#### 🔍 Detalhamento das Importâncias (Top {top_n})")
         st.dataframe(df_importances.sort_values(by="Importance", ascending=False).reset_index(drop=True))
 
     else:
         st.warning(
-            f"Os dados de importância das variáveis para o contexto **{selected_prova_nome}** não estão disponíveis. Verifique se o arquivo `feature_importances_{target_col_selecionado}.csv` foi salvo corretamente.")
+            f"Os dados de importância das variáveis para o contexto **{selected_prova_nome}** não estão disponíveis. Verifique se o arquivo `feature_importances_{target_col_selecionado}.csv` foi salvo corretamente."
+        )
 
 # --- TAB 3 (Análise do Modelo Principal) ---
 with tab3:
