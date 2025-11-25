@@ -76,6 +76,7 @@ for k, v in default_values.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
+
 @st.cache_resource
 def load_main_model_and_data(target_col):
     """
@@ -86,54 +87,63 @@ def load_main_model_and_data(target_col):
     base_path = "./prediction_module/src/saved_model"
     os.makedirs(base_path, exist_ok=True)
 
-    model_filename = f"randomForest_{target_col}.pkl"
-    importances_filename = f"feature_importances_{target_col}.csv"
 
+    model_filename = f"randomForest_{target_col}.pkl"
     model_path = os.path.join(base_path, model_filename)
     csv_x_path = os.path.join(base_path, "analyzer_X_test.csv")
     csv_y_path = os.path.join(base_path, "analyzer_y_test.csv")
+
+    # Carregamentos (Se os arquivos existirem)
+    if os.path.exists(model_path):
+        data["main_model"] = joblib.load(model_path)
+    if os.path.exists(csv_x_path):
+        data["X_test"] = pd.read_csv(csv_x_path)
+    if os.path.exists(csv_y_path):
+        data["y_test"] = pd.read_csv(csv_y_path).squeeze()
+
+    # Carregamento das importâncias (necessário para todas as opções, incluindo GLOBAL)
+    importances_filename = f"feature_importances_{target_col}.csv"
     importances_path = os.path.join(base_path, importances_filename)
 
-    # Carregamentos
-    data["main_model"] = joblib.load(model_path)
-    data["X_test"] = pd.read_csv(csv_x_path)
-    data["y_test"] = pd.read_csv(csv_y_path).squeeze()
-    data["importances"] = pd.read_csv(importances_path)
+    if os.path.exists(importances_path):
+        data["importances"] = pd.read_csv(importances_path)
+    else:
+        raise FileNotFoundError(f"Arquivo de importâncias '{importances_filename}' não encontrado.")
 
     data["target_col"] = target_col
     return data
 
+
 # Tabs
 tab1, tab2, tab3 = st.tabs(["🎯 Simulação de Resultado", "📌 Variáveis Importantes", "🔬 Análise do Modelo Principal"])
 
-# --- Lógica de Carregamento GLOBAL (Permite que Tab 2 e Tab 3 usem os mesmos dados) ---
 # Inicializa o seletor na primeira vez que a página é carregada
 if 'prova_seletor' not in st.session_state:
     st.session_state.prova_seletor = list(MAP_PROVAS.keys())[0]
 
-# Obtém o nome da coluna alvo (ex: NU_NOTA_MT)
+# Obtém o nome da coluna alvo
 target_col_selecionado = MAP_PROVAS[st.session_state.prova_seletor]
 
+analysis_data = None
+selected_prova_nome = st.session_state.prova_seletor
 
-# --- Lógica de Carregamento GLOBAL ---
 try:
     analysis_data = load_main_model_and_data(target_col_selecionado)
-    st.toast(f"Modelo e dados de análise para {target_col_selecionado} carregados! 🎉", icon='✅')
+    st.toast(f"Dados de análise para {selected_prova_nome} carregados! 🎉", icon='✅')
 
 except FileNotFoundError as e:
-    st.error(f"Erro ao carregar arquivos: {e}")
-    st.error(
-        f"Verifique se os arquivos do modelo e das importâncias existem no diretório "
-        f"'./prediction_module/src/saved_model/'."
-    )
-    analysis_data = None
-
+    # Captura erros de FileNotFoundError aqui. O erro de modelo principal (tab3)
+    # é tratado dentro da tab3
+    if "importances" in str(e):
+        st.error(f"Erro Crítico: Arquivo de importâncias não encontrado para {selected_prova_nome}.")
+        st.error(
+            f"Verifique se o arquivo necessário existe: './prediction_module/src/saved_model/{os.path.basename(str(e).split(' ')[-1])}'")
+    else:
+        # Se for erro de modelo/X_test/y_test, permite continuar para o Tab 1
+        st.warning(
+            f"Aviso: Arquivos de modelo ou teste para {selected_prova_nome} não encontrados, Abas 2 e 3 podem falhar. {e}")
 except Exception as e:
     st.error(f"Erro inesperado no carregamento: {e}")
-    analysis_data = None
-
-selected_prova_nome = st.session_state.prova_seletor
-# --- FIM Lógica de Carregamento GLOBAL ---
 
 # --- TAB 1 (Simulação de Resultado) ---
 with tab1:
@@ -232,97 +242,131 @@ with tab1:
 
 # --- TAB 2 (Variáveis Importantes) ---
 with tab2:
-    st.subheader(f"🏆 Top 10 Variáveis de Maior Impacto ({selected_prova_nome})")
+    st.subheader("📌 Importância das Variáveis")
+
+    # Lista de opções apenas para o seletor desta aba
+    options_for_tab2 = list(MAP_PROVAS.keys())
+
+    st.selectbox(
+        "Selecione o Contexto de Análise:",
+        options=options_for_tab2,
+        index=options_for_tab2.index(selected_prova_nome),  # Mantém o estado atual
+        key='prova_seletor_tab2',
+        on_change=st.rerun  # Força o recarregamento ao trocar de prova
+    )
+
+    # Atualiza o seletor principal se foi alterado nesta aba
+    if st.session_state.prova_seletor_tab2 != st.session_state.prova_seletor:
+        st.session_state.prova_seletor = st.session_state.prova_seletor_tab2
+        st.rerun()
+
     st.info(
-        "O gráfico abaixo mostra as 10 variáveis que o modelo de predição considerou mais importantes para prever o resultado.")
+        f"O gráfico mostra as variáveis que o modelo de predição considerou mais importantes para prever o resultado **{selected_prova_nome}**.")
 
     if analysis_data and "importances" in analysis_data:
-        df_importances = analysis_data["importances"].head(10).sort_values(by="Importance", ascending=True)
+        top_n = 10
+
+        df_importances = analysis_data["importances"].head(top_n).sort_values(by="Importance", ascending=True)
 
         fig = px.bar(
             df_importances,
             x="Importance",
             y="Feature",
             orientation='h',
-            title=f"Importância das Variáveis para {selected_prova_nome}",
-            labels={'Importance': 'Pontuação de Importância (Gini)', 'Feature': 'Variável'}
+            title=f"Top {top_n} Importância das Variáveis para {selected_prova_nome}",
+            labels={'Importance': 'Pontuação de Importância (Gini)', 'Feature': 'Variável'},
+            color_discrete_sequence=px.colors.qualitative.Bold
         )
         fig.update_layout(xaxis_title="Importância Relativa")
         st.plotly_chart(fig, use_container_width=True)
-        # Adicionei uma visualização em tabela para detalhamento
+
+        # Detalhamento em tabela
         st.markdown("---")
-        st.markdown("#### 🔍 Detalhamento das Importâncias (Top 10)")
+        st.markdown(f"#### 🔍 Detalhamento das Importâncias (Top {top_n})")
         st.dataframe(df_importances.sort_values(by="Importance", ascending=False).reset_index(drop=True))
 
     else:
         st.warning(
-            f"Os dados de importância das variáveis para a prova **{selected_prova_nome}** não estão disponíveis. Verifique se o arquivo `feature_importances_{target_col_selecionado}.csv` foi salvo corretamente.")
+            f"Os dados de importância das variáveis para o contexto **{selected_prova_nome}** não estão disponíveis. Verifique se o arquivo `feature_importances_{target_col_selecionado}.csv` foi salvo corretamente.")
 
 # --- TAB 3 (Análise do Modelo Principal) ---
 with tab3:
     st.subheader("🔬 Análise Exploratória do Modelo Principal")
 
-    # --- Seletor de Prova ---
-    # Usamos o `st.selectbox` aqui para controlar o `st.session_state.prova_seletor`
+    provas_analise_exclusiva = [k for k in MAP_PROVAS.keys() if MAP_PROVAS[k] ]
+
+    if selected_prova_nome not in provas_analise_exclusiva:
+        st.session_state.prova_seletor = provas_analise_exclusiva[0]
+        st.rerun()
+
     st.selectbox(
         "Selecione o Modelo de Prova para Análise:",
-        options=list(MAP_PROVAS.keys()),
-        index=list(MAP_PROVAS.keys()).index(selected_prova_nome),  # Mantém o estado atual
-        key='prova_seletor',
+        options=provas_analise_exclusiva,
+        index=provas_analise_exclusiva.index(selected_prova_nome),  # Mantém o estado atual
+        key='prova_seletor_tab3',
         on_change=st.rerun  # Força o recarregamento ao trocar de prova
     )
+
+    # Atualiza o seletor principal se foi alterado nesta aba
+    if st.session_state.prova_seletor_tab3 != st.session_state.prova_seletor:
+        st.session_state.prova_seletor = st.session_state.prova_seletor_tab3
+        st.rerun()
 
     st.info(
         "Aqui usamos o modelo para fazer previsões de alunos reais do conjunto de teste.")
     st.markdown(f"**Modelo Carregado:** `randomForest_{target_col_selecionado}.pkl` ({selected_prova_nome})")
 
-    # O resto do código usa analysis_data que foi carregado no topo
     if analysis_data and analysis_data.get("target_col") == target_col_selecionado:
-        main_model = analysis_data["main_model"]
-        X_test_analyzer = analysis_data["X_test"]
-        y_test_analyzer = analysis_data["y_test"]
 
-        # Botão para sortear um aluno
-        if st.button("Carregar Aluno Aleatório do Teste", use_container_width=True, key="btn_analise"):
-            rand_idx = np.random.randint(0, len(X_test_analyzer))
-            st.session_state.analyzer_idx = rand_idx
-            # Armazena a coluna alvo do modelo atual para evitar predições cruzadas
-            st.session_state.analyzer_col = target_col_selecionado
+        # Verifica se o modelo e os dados de teste foram carregados
+        if "main_model" not in analysis_data or "X_test" not in analysis_data or "y_test" not in analysis_data:
+            st.warning("Arquivos de modelo principal ou dados de teste não foram carregados. Verifique o diretório.")
+        else:
+            main_model = analysis_data["main_model"]
+            X_test_analyzer = analysis_data["X_test"]
+            y_test_analyzer = analysis_data["y_test"]
 
-        # Se um aluno foi sorteado E o modelo for o mesmo, mostra os dados
-        if "analyzer_idx" in st.session_state and st.session_state.get("analyzer_col") == target_col_selecionado:
-            idx = st.session_state.analyzer_idx
-            st.markdown(f"--- \n### 🧑‍🎓 Aluno Sorteado (Índice: {idx})")
+            # Botão para sortear um aluno
+            if st.button("Carregar Aluno Aleatório do Teste", use_container_width=True, key="btn_analise"):
+                rand_idx = np.random.randint(0, len(X_test_analyzer))
+                st.session_state.analyzer_idx = rand_idx
+                # Armazena a coluna alvo do modelo atual para evitar predições cruzadas
+                st.session_state.analyzer_col = target_col_selecionado
 
-            # Pega os dados do aluno
-            aluno_x_data = X_test_analyzer.iloc[[idx]]
-            aluno_y_real_class = y_test_analyzer.iloc[idx]
+            # Se um aluno foi sorteado E o modelo for o mesmo, mostra os dados
+            if "analyzer_idx" in st.session_state and st.session_state.get("analyzer_col") == target_col_selecionado:
+                idx = st.session_state.analyzer_idx
+                st.markdown(f"--- \n### 🧑‍🎓 Aluno Sorteado (Índice: {idx})")
 
-            # Faz a predição com o modelo principal
-            aluno_y_pred_class = main_model.predict(aluno_x_data)[0]
+                # Pega os dados do aluno
+                aluno_x_data = X_test_analyzer.iloc[[idx]]
+                aluno_y_real_class = y_test_analyzer.iloc[idx]
 
-            # Converte as classes (0,1,2) para labels ("Baixo", "Médio", "Alto")
-            pred_label = MAP_RESULTADO[aluno_y_pred_class]
-            real_label = MAP_RESULTADO[aluno_y_real_class]
+                # Faz a predição com o modelo principal
+                aluno_y_pred_class = main_model.predict(aluno_x_data)[0]
 
-            # Mostra os resultados
-            st.markdown("#### Resultado da Predição ")
-            cols = st.columns(2)
-            cols[0].metric("🎯 Predição do Modelo", pred_label)
-            cols[1].metric("✅ Resultado Real", real_label)
+                # Converte as classes (0,1,2) para labels ("Baixo", "Médio", "Alto")
+                pred_label = MAP_RESULTADO[aluno_y_pred_class]
+                real_label = MAP_RESULTADO[aluno_y_real_class]
 
-            if pred_label == real_label:
-                st.success("O modelo acertou a previsão!")
-            else:
-                st.error("O modelo errou a previsão.")
+                # Mostra os resultados
+                st.markdown("#### Resultado da Predição ")
+                cols = st.columns(2)
+                cols[0].metric("🎯 Predição do Modelo", pred_label)
+                cols[1].metric("✅ Resultado Real", real_label)
 
-            # Mostra TODOS os dados do aluno
-            st.markdown("--- \n#### Dados Completos do Aluno ")
-            st.dataframe(aluno_x_data.T)
+                if pred_label == real_label:
+                    st.success("O modelo acertou a previsão!")
+                else:
+                    st.error("O modelo errou a previsão.")
 
-        elif "analyzer_idx" in st.session_state and st.session_state.get("analyzer_col") != target_col_selecionado:
-            st.warning(
-                f"O modelo de previsão mudou para **{selected_prova_nome}**. Clique em **'Carregar Aluno Aleatório do Teste'** para rodar a previsão com o novo modelo.")
+                st.markdown("--- \n#### Dados Completos do Aluno ")
+                st.dataframe(aluno_x_data.T)
+
+            elif "analyzer_idx" in st.session_state and st.session_state.get("analyzer_col") != target_col_selecionado:
+                st.warning(
+                    f"O modelo de previsão mudou para **{selected_prova_nome}**. Clique em **'Carregar Aluno Aleatório do Teste'** para rodar a previsão com o novo modelo.")
 
     else:
-        st.error(f"Não foi possível carregar o modelo para a prova selecionada ({selected_prova_nome}).")
+        st.error(
+            f"Não foi possível carregar o modelo ou os dados de análise para a prova selecionada ({selected_prova_nome}).")
