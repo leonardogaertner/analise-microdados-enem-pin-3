@@ -6,13 +6,13 @@ import time
 
 # --- Configuração do Banco de Dados PostgreSQL ---
 DB_USER = 'postgres'
-DB_PASS = 'postgres'
+DB_PASS = 'aluno'  # CORRIGIDO: mesma senha do primeiro script
 DB_HOST = 'localhost'
 DB_NAME = 'microdados'
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}/{DB_NAME}"
 
 # --- Configurações ---
-ARQUIVO_CSV = r'C:\Users\mario\Downloads\dados_completos.csv'
+ARQUIVO_CSV = 'dados_completo.csv'
 NOME_TABELA = 'questoes_enem'
 TAMANHO_CHUNK = 50000
 
@@ -21,7 +21,7 @@ start_time = time.time()
 print(f"Iniciando a operação às {time.ctime()}...")
 
 try:
-    # FASE 1: Analisando estrutura do CSVfsfsf
+    # FASE 1: Analisando estrutura do CSV
     print("\n--- FASE 1: Analisando estrutura do CSV... ---")
     df_header = pd.read_csv(ARQUIVO_CSV, encoding='utf-8-sig', nrows=5)
     print(f"Colunas encontradas: {list(df_header.columns)}")

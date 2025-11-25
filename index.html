@@ -1,0 +1,715 @@
+<style>
+    /* Estilos do carrossel de avaliações */
+    .avaliacoes-carrossel {
+        margin: 30px 0;
+        padding: 20px 0;
+        background: white;
+        border-radius: 8px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .avaliacoes-titulo {
+        text-align: center;
+        font-size: 24px;
+        margin-bottom: 20px;
+        color: #333;
+        font-weight: bold;
+    }
+
+    .avaliacoes-container {
+        display: flex;
+        overflow-x: auto;
+        scroll-behavior: smooth;
+        padding: 10px 20px;
+        gap: 20px;
+        scrollbar-width: none;
+        /* Firefox */
+    }
+
+    .avaliacoes-container::-webkit-scrollbar {
+        display: none;
+        /* Chrome, Safari, Edge */
+    }
+
+    .avaliacoes-carousel-each {
+        width: 280px;
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        font-size: 13px;
+        flex-shrink: 0;
+    }
+
+    .autor {
+        font-weight: bold;
+        margin-bottom: 5px;
+        color: #333;
+    }
+
+    .local {
+        color: #666;
+        font-size: 12px;
+        margin-bottom: 8px;
+    }
+
+    .nota {
+        margin-bottom: 10px;
+    }
+
+    .estrelas {
+        color: #ffc107;
+        font-size: 16px;
+        letter-spacing: 2px;
+    }
+
+    .mensagem {
+        line-height: 1.4;
+        color: #333;
+        font-style: italic;
+        margin-top: 10px;
+    }
+
+    /* Botões de navegação do carrossel */
+    .carrossel-nav {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        background: rgba(255, 255, 255, 0.8);
+        border: none;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        color: #333;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        z-index: 10;
+        transition: all 0.3s ease;
+    }
+
+    .carrossel-prev {
+        left: 10px;
+    }
+
+    .carrossel-next {
+        right: 10px;
+    }
+
+    .carrossel-nav:hover {
+        background: white;
+        box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+        transform: translateY(-50%) scale(1.1);
+    }
+
+    /* Indicadores do carrossel */
+    .carrossel-indicadores {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 15px;
+    }
+
+    .carrossel-indicador {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #ccc;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .carrossel-indicador.ativo {
+        background: #4a6fa5;
+        transform: scale(1.2);
+    }
+</style>
+
+<script>
+
+    const nomes = [
+        "Ana", "Maria", "João", "Pedro", "Paulo", "Carlos", "Lucas", "Mateus", "Gabriel", "Rafael",
+        "Fernanda", "Patrícia", "Juliana", "Aline", "Camila", "Bruna", "Letícia", "Amanda", "Tatiane", "Vanessa",
+        "Marcos", "André", "Felipe", "Ricardo", "Roberto", "Bruno", "Diego", "Daniel", "Leonardo", "Thiago",
+        "Carla", "Simone", "Elaine", "Cristina", "Adriana", "Sandra", "Renata", "Márcia", "Luciana", "Isabela",
+        "Antônio", "Francisco", "José", "Eduardo", "Mário", "Sérgio", "Alexandre", "Rodrigo", "Vinícius", "Wesley",
+        "Cláudia", "Larissa", "Priscila", "Tânia", "Viviane", "Rosana", "Cintia", "Débora", "Gisele", "Jéssica",
+        "Fábio", "Leandro", "Maurício", "Rogério", "Samuel", "Igor", "Douglas", "Gustavo", "Hugo", "Júlio",
+        "Bianca", "Carolina", "Daniele", "Elisa", "Flávia", "Helena", "Iara", "Jaqueline", "Kátia", "Lorena",
+        "Michele", "Natália", "Olívia", "Pamela", "Quezia", "Raquel", "Sabrina", "Talita", "Ursula", "Valéria",
+        "William", "Xavier", "Yuri", "Zaqueu", "Arthur", "Bernardo", "Cauê", "Davi", "Enzo", "Felipe", "Alessandra", "Breno", "Caio", "Darlan", "Emanuel", "Fabiana", "Geovana", "Henrique", "Ítalo", "Joana",
+        "Karen", "Luan", "Mirella", "Noemi", "Otávio", "Pietra", "Quésia", "Rebeca", "Sara", "Tales",
+        "Ubirajara", "Vânia", "Wellington", "Yasmin", "Zion", "Abel", "Benício", "Catarina", "Doris", "Ester",
+        "Fátima", "Graziella", "Heitor", "Ingrid", "Jonas", "Kelly", "Leila", "Melissa", "Nicolas", "Orlando",
+        "Patrícia", "Rubens", "Sueli", "Túlio", "Valentim", "Waldemar", "Yara", "Zenaide", "Ariana", "Brisa",
+        "Célio", "Domingos", "Eliane", "Francis", "Giovana", "Horácio", "Ivana", "Jean", "Kauã",
+        "Lorraine", "Mariana", "Nádia", "Olga", "Priscila", "Ruan", "Sandro", "Tainá", "Ulisses", "Vitória",
+        "Walter", "Yago", "Zélia", "Agnes", "Bárbara", "Ciro", "Denise", "Estela", "Flora", "Geraldo",
+        "Helder", "Isis", "Jacira", "Kléber", "Lívia", "Maristela", "Nair", "Osvaldo", "Paola", "Rita",
+        "Sheila", "Teodoro", "Valdir", "Weslley", "Yuri", "Zé Carlos", "Amélia", "Brígida", "Cíntia", "Dionísio"
+
+    ];
+
+    // Lista de sobrenomes brasileiros
+    const sobrenomes = [
+        "Silva", "Santos", "Oliveira", "Souza", "Rodrigues", "Ferreira", "Alves", "Pereira", "Lima", "Gomes",
+        "Costa", "Ribeiro", "Martins", "Carvalho", "Almeida", "Rocha", "Nascimento", "Mendes", "Barbosa", "Freitas",
+        "Araújo", "Monteiro", "Melo", "Cardoso", "Teixeira", "Caldeira", "Vieira", "Moreira", "Correia", "Cavalcanti",
+        "Dias", "Cunha", "Machado", "Moura", "Campos", "Bezerra", "Borges", "Pinto", "Andrade", "Barros",
+        "Guimarães", "Coelho", "Siqueira", "Moraes", "Nogueira", "Marques", "Leal", "Ramos", "Medeiros", "Duarte",
+        "Tavares", "Farias", "Peixoto", "Xavier", "Lacerda", "Queiroz", "Viana", "Santana", "Rezende", "Azevedo",
+        "Aguiar", "Figueiredo", "Gonçalves", "Brito", "Bispo", "Pires", "Vasconcelos", "Amorim", "Dantas", "Castro",
+        "Fontes", "Maciel", "Galvão", "Santiago", "Miranda", "Fonseca", "Pacheco", "Padilha", "Macedo", "Morais",
+        "Rios", "Neves", "Muniz", "Lopes", "Cruz", "Flores", "Braz", "Torres", "Otero", "Valle",
+        "Wagner", "Klein", "Schmidt", "Weber", "Hoffmann", "Schneider", "Albrecht", "Braun", "Kraemer", "Lange", "Batista", "Ramalho", "Sales", "Assis", "Prado", "Mota", "Porto", "Belem", "Simões", "Fagundes",
+        "Cabral", "Rezende", "Sodré", "Lourenço", "Garrido", "Pessoa", "Serrano", "Frota", "Botelho", "Severino",
+        "Ferraz", "César", "Paz", "Benevides", "Queirós", "Serra", "Amado", "Saldanha", "Lopes da Silva", "Pontes",
+        "Barreto", "Alencar", "Teles", "Rangel", "Villela", "Prates", "Furlan", "Bianchini", "Russo", "Galli",
+        "Moretti", "Romano", "D'Amico", "Montenegro", "Valentim", "Colares", "Peçanha", "Garcia", "Ortiz", "Serrano",
+        "Toledo", "Serrão", "Astudillo", "Alcaraz", "Fioravante", "Zanetti", "Castilho", "Benites", "Cabreira", "Escobar",
+        "Villanova", "Fraga", "Arruda", "Drummond", "Barcellos", "Vargas", "Loureiro", "Nóbrega", "Seabra", "Mamede",
+        "Castelhano", "Pimentel", "Bicalho", "Miranda de Souza", "Varella", "Camargo", "Lacerda Filho", "Garrido", "Barone", "Serrati",
+        "Alvarenga", "Godoy", "Parente", "Cantarini", "Sobrinho", "Meireles", "Travassos", "Bocchi", "Romanelli", "Pizzol",
+        "Zanardi", "Cereja", "Milani", "Tonelli", "Bertolucci", "Ferro", "Marchetti", "Sorrentino", "Trindade", "Serafim"
+
+    ];
+
+    // Lista de cidades brasileiras com UF
+    const cidades = [
+        "São Paulo - SP", "Rio de Janeiro - RJ", "Belo Horizonte - MG", "Porto Alegre - RS", "Curitiba - PR",
+        "Salvador - BA", "Fortaleza - CE", "Recife - PE", "Brasília - DF", "Manaus - AM",
+        "Belém - PA", "Goiânia - GO", "Campinas - SP", "São Luís - MA", "Maceió - AL", "Natal - RN",
+        "Teresina - PI", "João Pessoa - PB", "Florianópolis - SC", "Cuiabá - MT",
+        "Aracaju - SE", "Campo Grande - MS", "Vitória - ES", "Palmas - TO", "Rio Branco - AC",
+        "Porto Velho - RO", "Boa Vista - RR", "Macapá - AP", "Santos - SP", "São José dos Campos - SP",
+        "Ribeirão Preto - SP", "Uberlândia - MG", "Sorocaba - SP", "Niterói - RJ", "Caxias do Sul - RS",
+        "Feira de Santana - BA", "Juiz de Fora - MG", "Joinville - SC", "Londrina - PR", "Anápolis - GO",
+        "São Bernardo do Campo - SP", "Osasco - SP", "Duque de Caxias - RJ", "São José do Rio Preto - SP",
+        "Contagem - MG", "São João de Meriti - RJ", "Betim - MG", "Canoas - RS", "Mauá - SP", "Diadema - SP",
+        "Carapicuíba - SP", "Campina Grande - PB", "Piracicaba - SP", "Bauru - SP", "Itaquaquecetuba - SP",
+        "Montes Claros - MG", "Cariacica - ES", "Vitória da Conquista - BA", "Blumenau - SC", "Pelotas - RS",
+        "Franca - SP", "Caucaia - CE", "Santa Maria - RS", "Ponta Grossa - PR", "Rio Grande - RS",
+        "Paulista - PE", "Guarulhos - SP", "Embu - SP", "Volta Redonda - RJ", "Petrópolis - RJ",
+        "Várzea Grande - MT", "Novo Hamburgo - RS", "Serra - ES", "Ipatinga - MG", "Mogi das Cruzes - SP",
+        "Suzano - SP", "Juazeiro do Norte - CE", "Marabá - PA", "Foz do Iguaçu - PR", "Imperatriz - MA",
+        "Colombo - PR", "São Vicente - SP", "Jundiaí - SP", "Maringá - PR", "Arapiraca - AL",
+        "Americana - SP", "Araraquara - SP", "Jacareí - SP", "Hortolândia - SP", "Cachoeiro de Itapemirim - ES",
+        "Cascavel - PR", "Chapecó - SC", "Itajaí - SC", "Lages - SC", "Jaraguá do Sul - SC",
+        "Palhoça - SC", "Balneário Camboriú - SC", "Brusque - SC", "Tubarão - SC", "São Bento do Sul - SC", "Águas Lindas de Goiás - GO",
+        "Alvorada - RS",
+        "Angra dos Reis - RJ",
+        "Araçatuba - SP",
+        "Araxá - MG",
+        "Assis - SP",
+        "Barbacena - MG",
+        "Barreiras - BA",
+        "Barretos - SP",
+        "Bento Gonçalves - RS",
+        "Boa Vista do Tupim - BA",
+        "Botucatu - SP",
+        "Cabo Frio - RJ",
+        "Cabo de Santo Agostinho - PE",
+        "Cachoeirinha - RS",
+        "Camaçari - BA",
+        "Camaragibe - PE",
+        "Cametá - PA",
+        "Cândido Mota - SP",
+        "Capanema - PA",
+        "Caruaru - PE",
+        "Catalão - GO",
+        "Caxias - MA",
+        "Ceres - GO",
+        "Corumbá - MS",
+        "Crato - CE",
+        "Cubatão - SP",
+        "Dourados - MS",
+        "Eunápolis - BA",
+        "Estância - SE",
+        "Formosa - GO",
+        "Francisco Morato - SP",
+        "Gravataí - RS",
+        "Guarapuava - PR",
+        "Guaratinguetá - SP",
+        "Ilhéus - BA",
+        "Itabuna - BA",
+        "Itapetininga - SP",
+        "Itapipoca - CE",
+        "Itapira - SP",
+        "Ituiutaba - MG",
+        "Jequié - BA",
+        "Linhares - ES",
+        "Luziânia - GO",
+        "Maracanaú - CE",
+        "Maricá - RJ",
+        "Mossoró - RN",
+        "Naviraí - MS",
+        "Nilópolis - RJ",
+        "Nova Friburgo - RJ",
+        "Nova Iguaçu - RJ",
+        "Olinda - PE",
+        "Parauapebas - PA",
+        "Parintins - AM",
+        "Parnaíba - PI",
+        "Patos - PB",
+        "Poços de Caldas - MG",
+        "Pouso Alegre - MG",
+        "Praia Grande - SP",
+        "Queimados - RJ",
+        "Rondonópolis - MT",
+        "Santana - AP",
+        "Santarém - PA",
+        "Santo André - SP",
+        "Santo Antônio de Jesus - BA",
+        "Sapucaia do Sul - RS",
+        "Sete Lagoas - MG",
+        "Sobral - CE",
+        "Taboão da Serra - SP",
+        "Tatuí - SP",
+        "Timon - MA",
+        "Toledo - PR",
+        "Três Lagoas - MS",
+        "Ubá - MG",
+        "Umuarama - PR",
+        "Uruguaiana - RS",
+        "Valinhos - SP",
+        "Varginha - MG",
+        "Vespasiano - MG",
+        "Votorantim - SP",
+        "Xanxerê - SC",
+        "Barra Mansa - RJ",
+        "Arcoverde - PE",
+        "Patrocínio - MG",
+        "Catalão - GO",
+        "Santana de Parnaíba - SP",
+        "São Carlos - SP",
+        "Barra do Garças - MT",
+        "Lençóis Paulista - SP",
+        "Itacoatiara - AM",
+        "Altamira - PA",
+        "Paragominas - PA",
+        "Bragança Paulista - SP",
+        "Ribeirão das Neves - MG",
+        "Rio Claro - SP",
+        "Trindade - GO",
+        "Simões Filho - BA",
+        "Itabira - MG",
+        "Teófilo Otoni - MG",
+        "Passo Fundo - RS",
+        "Ipatinga - MG"
+
+    ];
+
+    const frases = [
+        "Quadro chegou antes do prazo e superou todas as minhas expectativas!",
+        "A qualidade do material é impressionante, parece obra de museu!",
+        "As cores são vibrantes e os detalhes são nítidos, exatamente como na imagem.",
+        "Comprei para presentear e ficou perfeito, a pessoa amou!",
+        "O acabamento é impecável, nota 10 para a Santorini Decorações!",
+        "Já é o terceiro quadro que compro e todos são de altíssima qualidade.",
+        "A embalagem veio super bem protegida, zero danos durante o transporte.",
+        "A moldura premium dá um toque de sofisticação incrível à obra.",
+        "O canvas tem uma textura maravilhosa que valoriza ainda mais a arte.",
+        "Comunicação excelente com a loja, tiraram todas as minhas dúvidas.",
+        "A arte do Rod é simplesmente fantástica, cada detalhe é único.",
+        "Quadro transformou completamente o ambiente, todos elogiam!",
+        "A entrega foi rápida e o produto veio exatamente como descrito.",
+        "Vale cada centavo investido, qualidade premium!",
+        "As dimensões são perfeitas para o espaço que eu queria preencher.",
+        "A resolução da imagem é incrível, parece que saiu de uma galeria de arte.",
+        "Processo de compra simples e entrega dentro do prazo combinado.",
+        "A arte chegou em perfeito estado, muito bem embalada.",
+        "Recomendo para todos que buscam qualidade e exclusividade.",
+        "O quadro é ainda mais bonito pessoalmente do que nas fotos.",
+        "Atendimento personalizado e produto de altíssima qualidade.",
+        "A moldura com vidro deu um acabamento super profissional.",
+        "Com certeza voltarei a comprar, estou encantado com o resultado!",
+        "A arte chegou rapidamente e superou minhas expectativas.",
+        "Perfeito para decorar a sala, deu um up no ambiente!",
+        "Qualidade do material é excelente, parece que vai durar para sempre.",
+        "A textura do canvas é incrível, dá profundidade à obra.",
+        "Comprei dois quadros e ambos são lindos, muito satisfeito!",
+        "O quadro veio bem embalado e sem nenhum arranhão.",
+        "A arte é exclusiva e original, exatamente o que eu procurava.",
+        "Processo de entrega foi tranquilo e o produto chegou intacto.",
+        "As cores são fiéis à imagem do site, muito vibrantes.",
+        "A moldura é resistente e de ótima qualidade.",
+        "Quadro chegou antes do prazo, super eficiente!",
+        "A arte é ainda mais impressionante ao vivo, recomendo!",
+        "Comunicação excelente durante todo o processo.",
+        "Produto de altíssima qualidade, superou expectativas.",
+        "Embalagem super reforçada, produto chegou perfeito.",
+        "A arte transformou completamente o ambiente.",
+        "Atendimento foi impecável, recomendo a todos!",
+        "Quadro é lindo e a qualidade é excelente!",
+        "Comprei para presentear e foi um sucesso!",
+        "A entrega foi rápida e o produto é lindo!",
+        "Qualidade impressionante, parece de galeria!",
+        "Superou todas as expectativas, recomendo!",
+        "Produto chegou perfeito e antes do prazo!",
+        "A arte é linda e a qualidade é excelente!",
+        "Comunicação excelente e produto de qualidade!",
+        "Quadro transformou o ambiente, todos elogiam!",
+        "Recomendo, produto de altíssima qualidade!",
+        "A arte chegou rapidamente e é linda!",
+        "Qualidade excelente, superou expectativas!",
+        "Produto chegou perfeito e é lindo!",
+        "Atendimento excelente e produto de qualidade!",
+        "Quadro é lindo e a entrega foi rápida!",
+        "Recomendo, produto de altíssima qualidade!",
+        "A arte é linda e a qualidade é excelente!",
+        "Produto chegou perfeito e superou expectativas!",
+        "Quadro transformou o ambiente, todos elogiam!",
+        "Comprei para presentear e foi um sucesso!",
+        "A entrega foi rápida e o produto é lindo!",
+        "Qualidade impressionante, parece de galeria!",
+        "Superou todas as expectativas, recomendo!",
+        "Produto chegou perfeito e antes do prazo!",
+        "A arte é linda e a qualidade é excelente!",
+        "Comunicação excelente e produto de qualidade!",
+        "Quadro transformou o ambiente, todos elogiam!",
+        "Recomendo, produto de altíssima qualidade!",
+        "A arte chegou rapidamente e é linda!",
+        "Qualidade excelente, superou expectativas!",
+        "Produto chegou perfeito e é lindo!",
+        "Atendimento excelente e produto de qualidade!",
+        "Quadro é lindo e a entrega foi rápida!",
+        "Recomendo, produto de altíssima qualidade!",
+        "A arte é linda e a qualidade é excelente!",
+        "Produto chegou perfeito e superou expectativas!",
+        "Quadro transformou o ambiente, todos elogiam!",
+        "Comprei para presentear e foi um sucesso!",
+        "A entrega foi rápida e o produto é lindo!",
+        "Qualidade impressionante, parece de galeria!",
+        "Superou todas as expectativas, recomendo!",
+        "Produto chegou perfeito e antes do prazo!",
+        "A arte é linda e a qualidade é excelente!",
+        "Comunicação excelente e produto de qualidade!",
+        "Quadro transformou o ambiente, todos elogiam!",
+        "Recomendo, produto de altíssima qualidade!",
+        "A arte chegou rapidamente e é linda!",
+        "Qualidade excelente, superou expectativas!",
+        "Produto chegou perfeito e é lindo!",
+        "Atendimento excelente e produto de qualidade!",
+        "Quadro é lindo e a entrega foi rápida!",
+        "Recomendo, produto de altíssima qualidade!",
+        "Recebi o quadro hoje e estou simplesmente apaixonada, muito melhor do que imaginei!",
+        "A arte deixou meu ambiente muito mais elegante, qualidade impecável.",
+        "Simplesmente perfeito! As cores são vivas e o acabamento é premium.",
+        "Chegou super rápido e muito bem embalado, adorei!",
+        "O quadro mudou totalmente minha sala, ficou maravilhoso!",
+        "A obra é muito superior ao que eu esperava, recomendo demais!",
+        "Tem uma presença incrível na parede, não consigo parar de olhar!",
+        "A moldura é muito bem feita e sofisticada, adorei!",
+        "Produto excelente, entrega rápida e qualidade surreal.",
+        "Estou encantada com cada detalhe da arte, maravilhoso!",
+        "Quadro ficou perfeito no meu escritório, trouxe vida ao ambiente.",
+        "As cores são intensas e a resolução é impressionante!",
+        "Parece uma peça de galeria, sofisticado demais!",
+        "Cada detalhe é perfeito, dá para ver o cuidado da produção.",
+        "Transformou meu quarto, ficou muito mais aconchegante!",
+        "A qualidade do canvas é fantástica, textura incrível.",
+        "Muito mais bonito pessoalmente, fiquei encantada!",
+        "Veio extremamente bem embalado, super protegido.",
+        "Instalei na sala e ficou surreal de tão lindo!",
+        "A arte tem uma profundidade incrível, parece 3D.",
+        "Produto excelente, comunicação perfeita com a loja.",
+        "Comprei 3 quadros e todos são maravilhosos!",
+        "Entrega dentro do prazo e produto impecável.",
+        "A moldura premium faz toda a diferença, muito elegante.",
+        "Deu outro nível para minha decoração, simplesmente lindo!",
+        "Arte autoral de verdade, é totalmente diferente de qualquer outro.",
+        "A qualidade da impressão é absurda, parece pintura real.",
+        "Recebi muitos elogios, todos querem saber onde comprei.",
+        "Quadro impecável, material de altíssimo padrão.",
+        "Minha experiência foi perfeita, do pedido à entrega.",
+        "Produto excelente, recomendo sem pensar duas vezes.",
+        "Quadro extraordinário, superou todas as expectativas.",
+        "Fiquei impressionado com a nitidez da imagem, maravilhoso!",
+        "O cuidado com a embalagem me surpreendeu, muito caprichado.",
+        "Comprei para o consultório e os pacientes adoraram!",
+        "Deu vida nova ao ambiente, estou encantada.",
+        "Qualidade premium, vale cada centavo!",
+        "Perfeito! Instalei e já transformou tudo.",
+        "O acabamento é digno de galeria, impecável.",
+        "Chegou muito rápido e sem nenhum dano.",
+        "Fiquei impressionada com a beleza dessa arte!",
+        "O quadro é leve e fácil de instalar, adorei!",
+        "Super recomendo, experiência perfeita!",
+        "A composição das cores é maravilhosa, muito elegante.",
+        "A arte traz uma energia especial ao ambiente.",
+        "Quadro sensacional, chegou perfeito.",
+        "Produto muito bem feito, superou expectativas.",
+        "O brilho das cores é surreal, maravilhoso!",
+        "Entrega antes do prazo e qualidade excelente.",
+        "Já quero comprar outros modelos, amei demais!",
+        "Material resistente e acabamento muito bem feito.",
+        "Arte linda e com excelente durabilidade.",
+        "O quadro veio perfeito, sem nenhum defeito.",
+        "Impressão maravilhosa, super nítida.",
+        "Comprei para meu corredor e ficou incrível!",
+        "Um dos melhores quadros que já comprei.",
+        "Quadro de altíssimo nível, recomendo muito!",
+        "Perfeito para quem gosta de decoração sofisticada.",
+        "A arte transmite uma sensação maravilhosa, muito bonita.",
+        "Simplesmente impecável, adorei!",
+        "Ótima compra, quadro de excelente qualidade.",
+        "A moldura veio perfeita e muito bem acabada.",
+        "O produto é ainda mais bonito ao vivo!",
+        "Detalhes impressionantes, muito bem feito.",
+        "Ficou maravilhoso na minha parede, amei!",
+        "Entrega rápida e produto incrível.",
+        "O quadro trouxe elegância ao meu lar.",
+        "As cores são intensas e harmoniosas.",
+        "Quadro belíssimo e super bem produzido!",
+        "Recomendo demais, produto espetacular.",
+        "Qualidade surpreendente, realmente premium.",
+        "O quadro ficou perfeito na sala de jantar!",
+        "Chegou tudo impecável, muito satisfeito.",
+        "A arte transmite muita personalidade, adorei!",
+        "Produto excelente, com acabamento sofisticado.",
+        "A textura do canvas é maravilhosa, muito artístico.",
+        "Recomendo muito! A qualidade é excepcional.",
+        "O quadro ficou perfeito no meu estúdio.",
+        "Arte muito bem impressa, rica em detalhes.",
+        "Segunda vez que compro e sempre perfeito!",
+        "O material é resistente e de altíssima qualidade.",
+        "Transformou minha casa, ficou maravilhoso.",
+        "Recebi antes do prazo e amei o produto.",
+        "O quadro é lindo demais, apaixonada!",
+        "Vale muito a pena, recomendo!",
+        "Quadro perfeito, acabamento impecável.",
+        "As cores são brilhantes e muito vivas!",
+        "Minha melhor compra de decoração até hoje!",
+        "A moldura é linda, super elegante.",
+        "Quadro excepcional, veio perfeito.",
+        "O produto tem um acabamento de alto padrão.",
+        "Foi perfeito para o ambiente que imaginei.",
+        "A arte é incrível, um verdadeiro destaque na parede.",
+        "Ficou muito mais bonito do que eu esperava.",
+        "Entrega muito rápida e segura.",
+        "O quadro trouxe sofisticação ao meu lar.",
+        "Simplesmente maravilhoso, amei cada detalhe!",
+        "Comprei para meu apartamento novo, ficou perfeito!"
+    ];
+
+    // Conjunto para armazenar avaliações já geradas e evitar repetições
+    const avaliacoesGeradas = new Set();
+
+    // Função para gerar uma data aleatória no ano atual
+    function gerarDataAleatoria() {
+        const anoAtual = new Date().getFullYear();
+        const mes = Math.floor(Math.random() * 12) + 1;
+        const dia = Math.floor(Math.random() * 28) + 1;
+        return `${dia.toString().padStart(2, '0')}/${mes.toString().padStart(2, '0')}/${anoAtual}`;
+    }
+
+    // Função para gerar uma avaliação única
+    function gerarAvaliacaoUnica() {
+        let nome, sobrenome, cidade, frase;
+        let tentativas = 0;
+        const maxTentativas = 200;
+
+        do {
+            nome = nomes[Math.floor(Math.random() * nomes.length)];
+            sobrenome = sobrenomes[Math.floor(Math.random() * sobrenomes.length)];
+            cidade = cidades[Math.floor(Math.random() * cidades.length)];
+            frase = frases[Math.floor(Math.random() * frases.length)];
+
+            const chaveAvaliacao = `${nome} ${sobrenome} - ${cidade} - ${frase}`;
+
+            if (!avaliacoesGeradas.has(chaveAvaliacao) || tentativas >= maxTentativas) {
+                avaliacoesGeradas.add(chaveAvaliacao);
+                break;
+            }
+
+            tentativas++;
+        } while (tentativas < maxTentativas);
+
+        return { nome, sobrenome, cidade, frase };
+    }
+
+    // Função para criar o carrossel de avaliações
+    function criarCarrosselAvaliacoes() {
+        const descricaoProduto = document.querySelector('.descricao-produto');
+        if (!descricaoProduto) return;
+
+        // Criar estrutura do carrossel
+        const carrosselHTML = `
+        <div class="avaliacoes-carrossel">
+            <div class="avaliacoes-titulo">O que nossos clientes dizem</div>
+            <button class="carrossel-nav carrossel-prev">‹</button>
+            <div class="avaliacoes-container" id="avaliacoes-container"></div>
+            <button class="carrossel-nav carrossel-next">›</button>
+            <div class="carrossel-indicadores" id="carrossel-indicadores"></div>
+        </div>
+    `;
+
+        // Inserir antes da descrição do produto
+        descricaoProduto.insertAdjacentHTML('beforebegin', carrosselHTML);
+
+        // Gerar avaliações
+        gerarAvaliacoes(15); // Gerar 15 avaliações para o carrossel
+
+        // Adicionar funcionalidade aos botões de navegação
+        adicionarNavegacaoCarrossel();
+
+        // Iniciar autoplay
+        iniciarAutoplay();
+    }
+
+    // Função para gerar múltiplas avaliações
+    function gerarAvaliacoes(quantidade) {
+        const container = document.getElementById('avaliacoes-container');
+        const indicadoresContainer = document.getElementById('carrossel-indicadores');
+        if (!container || !indicadoresContainer) return;
+
+        // Limpar avaliações existentes
+        container.innerHTML = '';
+        indicadoresContainer.innerHTML = '';
+        avaliacoesGeradas.clear();
+
+        for (let i = 0; i < quantidade; i++) {
+            const { nome, sobrenome, cidade, frase } = gerarAvaliacaoUnica();
+            const data = gerarDataAleatoria();
+
+            const avaliacaoHTML = `
+            <div class="avaliacoes-carousel-each" data-index="${i}">
+                <div class="autor"><strong>${nome} ${sobrenome}</strong></div>
+                <div class="local">${cidade} | ${data}</div>
+                <div class="nota">
+                    <span class="estrelas">★★★★★</span>
+                </div>
+                <div class="mensagem">${frase}</div>
+            </div>
+        `;
+
+            container.innerHTML += avaliacaoHTML;
+
+            // Adicionar indicador
+            const indicador = document.createElement('div');
+            indicador.className = `carrossel-indicador ${i === 0 ? 'ativo' : ''}`;
+            indicador.dataset.index = i;
+            indicador.addEventListener('click', () => rolarParaAvaliacao(i));
+            indicadoresContainer.appendChild(indicador);
+        }
+    }
+
+    // Função para adicionar navegação ao carrossel
+    function adicionarNavegacaoCarrossel() {
+        const container = document.getElementById('avaliacoes-container');
+        const prevBtn = document.querySelector('.carrossel-prev');
+        const nextBtn = document.querySelector('.carrossel-next');
+
+        if (!container || !prevBtn || !nextBtn) return;
+
+        const scrollAmount = 300; // Quantidade de pixels para rolar
+
+        prevBtn.addEventListener('click', () => {
+            container.scrollBy({
+                left: -scrollAmount,
+                behavior: 'smooth'
+            });
+            atualizarIndicadores();
+            reiniciarAutoplay();
+        });
+
+        nextBtn.addEventListener('click', () => {
+            container.scrollBy({
+                left: scrollAmount,
+                behavior: 'smooth'
+            });
+            atualizarIndicadores();
+            reiniciarAutoplay();
+        });
+
+        // Atualizar indicadores ao scrollar
+        container.addEventListener('scroll', atualizarIndicadores);
+    }
+
+    // Função para rolar para uma avaliação específica
+    function rolarParaAvaliacao(index) {
+        const container = document.getElementById('avaliacoes-container');
+        const avaliacao = container.querySelector(`[data-index="${index}"]`);
+
+        if (avaliacao) {
+            avaliacao.scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest',
+                inline: 'center'
+            });
+            reiniciarAutoplay();
+        }
+    }
+
+    // Função para atualizar indicadores ativos
+    function atualizarIndicadores() {
+        const container = document.getElementById('avaliacoes-container');
+        const indicadores = document.querySelectorAll('.carrossel-indicador');
+
+        if (!container || indicadores.length === 0) return;
+
+        const scrollLeft = container.scrollLeft;
+        const containerWidth = container.clientWidth;
+        const avaliacaoWidth = 300; // Largura aproximada de cada avaliação + gap
+
+        const indiceAtivo = Math.round(scrollLeft / avaliacaoWidth);
+
+        indicadores.forEach((indicador, index) => {
+            if (index === indiceAtivo) {
+                indicador.classList.add('ativo');
+            } else {
+                indicador.classList.remove('ativo');
+            }
+        });
+    }
+
+    // Variáveis para autoplay
+    let autoplayInterval;
+
+    // Função para iniciar autoplay
+    function iniciarAutoplay() {
+        // Parar autoplay anterior se existir
+        if (autoplayInterval) {
+            clearInterval(autoplayInterval);
+        }
+
+        // Iniciar novo autoplay (5 segundos)
+        autoplayInterval = setInterval(() => {
+            const container = document.getElementById('avaliacoes-container');
+            const nextBtn = document.querySelector('.carrossel-next');
+
+            if (container && nextBtn) {
+                // Simular clique no próximo
+                nextBtn.click();
+            }
+        }, 5000);
+    }
+
+    // Função para reiniciar autoplay
+    function reiniciarAutoplay() {
+        iniciarAutoplay();
+    }
+
+    // Pausar autoplay quando o mouse estiver sobre o carrossel
+    document.addEventListener('DOMContentLoaded', function () {
+        criarCarrosselAvaliacoes();
+
+        // Adicionar event listeners para pausar/retomar autoplay
+        const carrossel = document.querySelector('.avaliacoes-carrossel');
+        if (carrossel) {
+            carrossel.addEventListener('mouseenter', () => {
+                if (autoplayInterval) {
+                    clearInterval(autoplayInterval);
+                }
+            });
+
+            carrossel.addEventListener('mouseleave', () => {
+                iniciarAutoplay();
+            });
+        }
+    });
+</script>

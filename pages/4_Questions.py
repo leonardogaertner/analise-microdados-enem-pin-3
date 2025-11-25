@@ -75,7 +75,6 @@ st.markdown("### Escolha o tipo de análise que deseja realizar")
 
 st.markdown("---")
 
-# Layout com duas colunas para os cards
 col1, col2 = st.columns(2)
 
 with col1:
@@ -110,7 +109,6 @@ with col2:
 
 st.markdown("---")
 
-# Informações adicionais
 st.info("""
 **💡 Dica:**
 - Use **Análise de Questões** para estudar e entender as características das provas anteriores.
