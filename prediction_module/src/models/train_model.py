@@ -89,7 +89,7 @@ def metrics(model, X_test, y_test, X_columns):
     importances.sort_values(ascending=True).tail(15).plot(kind="barh")
 
 def save_model(model, target_col):
-    #CAminho
+    #Caminho
     save_dir = "./saved_model"
     os.makedirs(save_dir, exist_ok=True)
 
@@ -136,7 +136,7 @@ if __name__ == "__main__":
     target_col = "NU_NOTA_REDACAO"
     print(df[target_col].value_counts())
 
-    #Listas de colunas (target_col)
+    # Listas de colunas (target_col)
     nota_cols = ["NU_NOTA_CH", "NU_NOTA_MT", "NU_NOTA_CN", "NU_NOTA_LC", "NU_NOTA_REDACAO"]
 
     #Pré-processamento/Manipulação dos dados
