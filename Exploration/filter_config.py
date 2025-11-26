@@ -16,5 +16,7 @@ TYPE_OVERRIDES = {
     "Tipo de Escola":"categorical",
     "Certificado?":"categorical",
     "Treineiro?":"categorical",
+    "Nome do Município da Escola": "municipio",
+    "Nome do Município da Prova": "municipio",
 }
 

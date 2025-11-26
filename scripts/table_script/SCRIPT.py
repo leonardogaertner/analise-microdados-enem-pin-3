@@ -88,7 +88,10 @@ def aplicar_regras_de_negocio(df, ano):
     map_escolaridade = { 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'E': 5, 'F': 6, 'G': 7, 'H': 8 }
     map_escolaridade_reverso = { 1: 'Nunca estudou', 2: 'Não completou a 4ª série/5º ano', 3: 'Completou a 4ª série/5º ano', 4: 'Completou a 8ª série/9º ano', 5: 'Completou o Ensino Médio', 6: 'Completou a Faculdade', 7: 'Completou a Pós-graduação', 8: 'Não sabe' }
     map_faixa_etaria_adulto = { '1': 'Não', '2': 'Não', '3': 'Não', '4': 'Não', '5': 'Não', '6': 'Não', '7': 'Não', '8': 'Não', '9': 'Não', '10': 'Sim', '11': 'Sim', '12': 'Sim', '13': 'Sim', '14': 'Sim', '15': 'Sim', '16': 'Sim', '17': 'Sim', '18': 'Sim', '19': 'Sim', '20': 'Sim' }
-
+    
+    if 'TP_LOCALIZACAO_ESC' in df.columns:
+        df['LOCALIZACAO_ESCOLA'] = df['TP_LOCALIZACAO_ESC'].map({1: 'Urbana', 2: 'Rural'})
+    else: df['LOCALIZACAO_ESCOLA'] = None    
     if 'SG_UF_PROVA' in df.columns: df['REGIAO_CANDIDATO'] = df['SG_UF_PROVA'].map(map_regiao)
     else: df['REGIAO_CANDIDATO'] = None
     if 'SG_UF_ESC' in df.columns: df['REGIAO_ESCOLA'] = df['SG_UF_ESC'].map(map_regiao)

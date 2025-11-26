@@ -30,8 +30,14 @@ def removerColunas(df):
         "CO_UF_ESC", "CO_UF_PROVA",
         "CO_MUNICIPIO_PROVA", "CO_MUNICIPIO_ESC",  "TP_NACIONALIDADE",
         "TX_GABARITO_CH", "TX_GABARITO_CN", "TX_GABARITO_LC", "TX_GABARITO_MT",
-        "TX_RESPOSTAS_CH", "TX_RESPOSTAS_CN", "TX_RESPOSTAS_LC", "TX_RESPOSTAS_MT"
+        "TX_RESPOSTAS_CH", "TX_RESPOSTAS_CN", "TX_RESPOSTAS_LC", "TX_RESPOSTAS_MT",
+        # Lista de colunas com relação ao desempenho, vão ser ignoradas (observação feita pelo professor)
+        "MEDIA_GERAL",
+        "MEDIA_OBJETIVAS",
+        "INDICADOR_REDACAO_ZERADA",
+        "INDICADOR_ABSENTEISMO"
     ]
+
     return df.drop(columns=[c for c in colunas_remover if c in df.columns], errors="ignore")
 
 # Manter as colunas NaN e tratar como ND as categóricas --> Object
