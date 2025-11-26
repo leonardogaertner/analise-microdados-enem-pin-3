@@ -347,7 +347,19 @@ def criar_heatmap_correlacao(df_filtrado):
     corr.columns = [cols_notas_map.get(c, c) for c in corr.columns]; corr.index = [cols_notas_map.get(i, i) for i in corr.index]
     try:
         fig = go.Figure(data=go.Heatmap(z=corr.values, x=corr.columns, y=corr.index, colorscale='viridis_r', text=corr.values, texttemplate="%{text:.2f}", textfont={"size":10, "color": "white"}, hovertemplate='<b>%{x}</b> x <b>%{y}</b><br>Correlação: %{z:.2f}<extra></extra>'))
-        fig.update_layout(title="Correlação entre Áreas de Conhecimento", margin=dict(t=50, b=20, l=20, r=20), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='var(--text)', size=11), title_font_size=16, title_x=0.05, title_y=0.98, height=712, yaxis_autorange='reversed')
+        # fig.update_layout(title="Correlação entre Áreas de Conhecimento", margin=dict(t=50, b=20, l=20, r=20), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='var(--text)', size=11), title_font_size=16, title_x=0.05, title_y=0.98, height=712, yaxis_autorange='reversed')
+        fig.update_layout(
+            title="Correlação entre Áreas de Conhecimento",
+            margin=dict(t=50, b=20, l=20, r=20),
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='var(--text)', size=11),
+            title_font_size=16,
+            title_x=0.05,
+            title_y=0.98,
+            height=540,             
+            yaxis_autorange='reversed'
+        )
         return fig
     except Exception as e: return None
 
@@ -821,16 +833,28 @@ if gerar_pdf:
         """
         <script>
         (function() {
-          // Vamos atuar no documento principal do Streamlit
           const doc = parent.document;
 
-          // Evita injetar o mesmo estilo várias vezes
           if (!doc.getElementById('print-style-dashboard-enem')) {
             const style = doc.createElement('style');
             style.id = 'print-style-dashboard-enem';
             style.innerHTML = `
+              @page {
+                /* retrato (padrão) + sem margens extras do navegador */
+                size: A4;
+                margin: 0;
+              }
+
               @media print {
-                /* Esconde sidebar, toolbar, rodapé, etc. */
+                html, body {
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  background: white !important;
+                  -webkit-print-color-adjust: exact;
+                  print-color-adjust: exact;
+                }
+
+                /* some com barra, sidebar, etc do Streamlit */
                 [data-testid="stSidebar"],
                 [data-testid="stToolbar"],
                 [data-testid="stStatusWidget"],
@@ -839,30 +863,46 @@ if gerar_pdf:
                   display: none !important;
                 }
 
-                body {
-                  -webkit-print-color-adjust: exact;
-                  print-color-adjust: exact;
-                  background: white !important;
-                }
-
                 section.main {
                   padding-top: 0 !important;
+                  padding-left: 0 !important;
+                  padding-right: 0 !important;
                 }
 
-                /* Opcional: deixar o conteúdo mais largo na impressão */
-                .block-container {
-                  padding: 0 1rem 1rem 1rem !important;
+                /* container principal do conteúdo */
+                section.main .block-container {
                   max-width: 100% !important;
+                  width: 100% !important;
+                  margin: 0 !important;
+                  padding: 0.5rem 0.5rem 1rem 0.5rem !important;
+                  box-sizing: border-box;
+                  transform-origin: top left;
+                  transform: scale(0.95);   /* se ainda cortar na direita, baixa p/ 0.9 */
+                }
+
+                /* 🔑 TRUQUE: colunas do Streamlit viram linhas na impressão */
+                [data-testid="stHorizontalBlock"] {
+                  display: block !important;
+                }
+
+                [data-testid="stHorizontalBlock"] > div {
+                  flex: 0 0 100% !important;
+                  max-width: 100% !important;
+                  width: 100% !important;
+                }
+
+                /* ajuda a evitar quebra no meio de blocos */
+                .section-title,
+                .chart-placeholder-box {
+                  page-break-inside: avoid;
                 }
               }
             `;
             doc.head.appendChild(style);
           }
 
-          // Garante que estamos no topo antes de imprimir
+          // sobe pro topo e abre o diálogo de impressão
           parent.window.scrollTo(0, 0);
-
-          // Pequeno delay pro layout "assentar"
           setTimeout(function() {
             parent.window.print();
           }, 300);
