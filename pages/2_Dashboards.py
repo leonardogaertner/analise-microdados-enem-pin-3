@@ -8,7 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go 
 
 import os
-import numpy as np 
+import numpy as np
 
 from Dashboards.db.connection import get_engine
 
@@ -817,18 +817,58 @@ with col_g2:
 
 # --- PDF Generation ---
 if gerar_pdf:
-    st_html("""
-    <script>
-      const w = window.open('', '_blank', 'noopener,noreferrer');
-      w.document.write('<html><head><title>Dashboard ENEM PDF</title><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"/>');
-      const styles = document.querySelectorAll('style');
-      styles.forEach(style => w.document.head.appendChild(style.cloneNode(true)));
-      w.document.write('</head><body style="background-color: var(--bg-main) !important;">');
-      const mainContent = document.querySelector('.main .block-container');
-      if (mainContent) { w.document.write(mainContent.innerHTML); }
-      else { w.document.write(document.body.innerHTML); }
-      w.document.write('</body></html>');
-      w.document.close();
-      setTimeout(() => { w.focus(); w.print(); }, 1000);
-    </script>
-    """, height=0)
+    st_html(
+        """
+        <script>
+        (function() {
+          // Vamos atuar no documento principal do Streamlit
+          const doc = parent.document;
+
+          // Evita injetar o mesmo estilo várias vezes
+          if (!doc.getElementById('print-style-dashboard-enem')) {
+            const style = doc.createElement('style');
+            style.id = 'print-style-dashboard-enem';
+            style.innerHTML = `
+              @media print {
+                /* Esconde sidebar, toolbar, rodapé, etc. */
+                [data-testid="stSidebar"],
+                [data-testid="stToolbar"],
+                [data-testid="stStatusWidget"],
+                header,
+                footer {
+                  display: none !important;
+                }
+
+                body {
+                  -webkit-print-color-adjust: exact;
+                  print-color-adjust: exact;
+                  background: white !important;
+                }
+
+                section.main {
+                  padding-top: 0 !important;
+                }
+
+                /* Opcional: deixar o conteúdo mais largo na impressão */
+                .block-container {
+                  padding: 0 1rem 1rem 1rem !important;
+                  max-width: 100% !important;
+                }
+              }
+            `;
+            doc.head.appendChild(style);
+          }
+
+          // Garante que estamos no topo antes de imprimir
+          parent.window.scrollTo(0, 0);
+
+          // Pequeno delay pro layout "assentar"
+          setTimeout(function() {
+            parent.window.print();
+          }, 300);
+        })();
+        </script>
+        """,
+        height=0,
+        width=0
+    )
