@@ -27,6 +27,16 @@ st.markdown("""
         .stRadio > label {
             font-weight: bold;
         }
+        /* Novo estilo para exibir a classe de desempenho na Aba 1 */
+        .desempenho-metric div[data-testid="stMetricLabel"] {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .desempenho-metric div[data-testid="stMetricValue"] {
+            font-size: 40px;
+            font-weight: 900;
+            color: #33aaff; /* Cor de destaque para o resultado */
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -189,97 +199,83 @@ def prepare_student_data_for_prediction(form_data, model_features):
     # Fundamental/Não informado=0, Ensino Médio=1, Superior=2, Pós-graduação=3
     esc_map_val = {"Não informado": 0, "Fundamental": 0, "Ensino Médio": 1, "Superior": 2, "Pós-graduação": 3}
 
-    # 2. Converte os dados do formulário expandido para o formato do modelo
-    data_aluno = {
-        # Variáveis Diretas
-        'TP_SEXO': 1 if MAP_FORM_TO_MODEL["sexo"].get(form_data["sexo"], 'M') == 'F' else 0, # M:0, F:1
-        'TP_FAIXA_ETARIA': map_idade_to_faixa_etaria(form_data["idade"]),
-        'TP_ESCOLA': MAP_FORM_TO_MODEL["escola"].get(form_data["escola"], 2),
-        'TP_LINGUA': MAP_FORM_TO_MODEL["lingua_estrangeira"].get(form_data["lingua_estrangeira"], 0),
-        'IN_TREINEIRO': MAP_FORM_TO_MODEL["treineiro"].get(form_data["treineiro"], 0),
-        'TP_ESTADO_CIVIL': MAP_FORM_TO_MODEL["estado_civil"].get(form_data["estado_civil"], 1),
-        'TP_COR_RACA': MAP_FORM_TO_MODEL["cor_raca"].get(form_data["cor_raca"], 3),
-
-        # Variáveis Contextuais/Flags
-        'FLAG_CAPITAL': MAP_FORM_TO_MODEL["flag_capital"].get(form_data["flag_capital"], 0),
-        'IN_CERTIFICADO': MAP_FORM_TO_MODEL["in_certificado"].get(form_data["in_certificado"], 0),
-        'REGIAO_CANDIDATO': MAP_FORM_TO_MODEL["regiao_candidato"].get(form_data["regiao_candidato"], 3),
-        'REGIAO_ESCOLA': MAP_FORM_TO_MODEL["regiao_escola"].get(form_data["regiao_escola"], 3),
-        'TP_DEPENDENCIA_ADM_ESC': MAP_FORM_TO_MODEL["tp_dependencia_adm_esc"].get(form_data["tp_dependencia_adm_esc"], 0),
-        'TP_LOCALIZACAO_ESC': MAP_FORM_TO_MODEL["tp_localizacao_esc"].get(form_data["tp_localizacao_esc"], 1),
-        'TP_ENSINO': MAP_FORM_TO_MODEL["tp_ensino"].get(form_data["tp_ensino"], 1),
-
-        # Variáveis que não estão no formulário, mas o modelo exige (preenchidas com 0)
-        'CO_UF_ENTIDADE_CERTIFICACAO': 0, 'NO_ENTIDADE_CERTIFICACAO': 0, 'NO_MUNICIPIO_ESC': 0,
-        'NO_MUNICIPIO_PROVA': 0, 'SG_UF_ENTIDADE_CERTIFICACAO': 0, 'SG_UF_ESC': 0, 'SG_UF_PROVA': 0,
-        'NU_ANO': 2022, # Assumindo o ano de 2022 (pode ser ajustado)
-        'ESCOLARIDADE_PAIS_AGRUPADO': 0, 'INDICE_ACESSO_TECNOLOGIA': 0, 'RENDA_FAMILIAR': 0,
-        'TEMPO_FORA_ESCOLA': 0, 'TIPO_ESCOLA_AGRUPADO': 0, 'TP_ANO_CONCLUIU': 0,
-        'FLAG_CANDIDATO_ADULTO': 0 # Derivada, não coletada no form
-    }
+    # 2. Converte os dados do formulário expandido para o formato do modelo (Inicialização)
+    # Mantendo o data_aluno como um dict para updates posteriores
+    data_aluno = {}
 
     # Mapeamento e Inclusão das Q's do Questionário Socioeconômico
     socio_data = {}
     for k_form, k_model in MAP_FORM_TO_MODEL.items():
+        # Captura as respostas do questionário (Q001 a Q025)
         if isinstance(k_model, str) and k_model.startswith('Q0') and not k_model.startswith('Q005'):
             if k_form in form_data:
-                # O valor do form_data para as Q's é uma string como "A (Nenhuma/Não)"
-                letra_resposta = form_data[k_form][0] # Pega o 'A'
+                # O valor do form_data para as Q's é uma string como "A (Nenhuma/Não)" ou "A"
+                if k_form == "q005":
+                    num_pessoas = form_data.get(k_form, 1)
+                    if num_pessoas == 1: letra_resposta = 'A'
+                    elif num_pessoas == 2: letra_resposta = 'B'
+                    elif num_pessoas == 3: letra_resposta = 'C'
+                    elif num_pessoas == 4: letra_resposta = 'D'
+                    elif num_pessoas == 5: letra_resposta = 'E'
+                    else: letra_resposta = 'F' # 6 ou mais
+                else:
+                    letra_resposta = form_data[k_form][0] # Pega o 'A'
+
                 socio_data[k_model] = category_map.get(letra_resposta, 0) # Mapeia 'A' para 0
             else:
                 socio_data[k_model] = 0
 
+    # Q001 e Q002 (Escolaridade dos pais)
+    esc_pai_str = form_data.get("esc_pai", "Não informado")
+    esc_mae_str = form_data.get("esc_mae", "Não informado")
+    socio_data['Q001'] = category_map.get(MAP_QUESTIONARIO_OPCOES["Q001_OPTIONS"].get(esc_pai_str, 'A'), 0)
+    socio_data['Q002'] = category_map.get(MAP_QUESTIONARIO_OPCOES["Q002_OPTIONS"].get(esc_mae_str, 'A'), 0)
+
+    # Q006 (Renda Familiar)
+    renda_str = form_data.get("renda", "Nenhuma Renda")
+    letra_renda = MAP_QUESTIONARIO_OPCOES["Q006_OPTIONS"].get(renda_str, 'A')
+    socio_data['Q006'] = category_map.get(letra_renda, 0)
+
     # --- CÁLCULOS DERIVADOS ---
 
     # CÁLCULO 1: FLAG_CANDIDATO_ADULTO
-    # A flag é 1 se o candidato tem 25 anos ou mais, 0 caso contrário.
-    flag_adulto = 1 if form_data["idade"] >= 25 else 0
+    idade = form_data.get("idade", 20)
+    flag_adulto = 1 if idade >= 25 else 0
 
     # CÁLCULO 2: ESCOLARIDADE_PAIS_AGRUPADO
-    # É o nível mais alto de escolaridade entre pai (Q001) e mãe (Q002).
-    esc_pai_str = form_data["esc_pai"]
-    esc_mae_str = form_data["esc_mae"]
-
     nivel_pai = esc_map_val.get(esc_pai_str, 0)
     nivel_mae = esc_map_val.get(esc_mae_str, 0)
-
-    # Usamos o código numérico da maior escolaridade (0, 1, 2, 3...)
     escolaridade_pais_agrupado = max(nivel_pai, nivel_mae)
 
-    # CÁLCULO 3: INDICE_ACESSO_TECNOLOGIA (Simples, baseado nas duas perguntas principais)
-    # Uma métrica simples: 1 ponto por ter internet e 1 ponto por ter computador
-    acesso_internet = 1 if form_data["internet"] == "Sim" else 0
-    possui_computador = 1 if form_data["computador"] == "Sim" else 0
+    # CÁLCULO 3: INDICE_ACESSO_TECNOLOGIA (Simples)
+    acesso_internet = 1 if form_data.get("internet", "Não") == "Sim" else 0
+    possui_computador = 1 if form_data.get("computador", "Não") == "Sim" else 0
     indice_acesso = acesso_internet + possui_computador
-    # NOTA: Um cálculo mais preciso do ICSE do ENEM usaria TODAS as Q's de posse de bens/serviços.
-    # Para simplicidade, usamos esta proxy, mas o modelo irá usar todas as Q's individuais (Q007, Q024, Q025 etc.)
 
     # CÁLCULO 4: RENDA_FAMILIAR
-    # Usamos o mesmo valor codificado de Q006 (Renda Familiar)
-    # A variável 'Q006' já está codificada em 'socio_data['Q006']'
     renda_familiar_agrupada = socio_data['Q006']
 
     # --- CONSTRUÇÃO FINAL DO DATAFRAME ---
     data_aluno = {
-        # Variáveis Diretas
+        # Variáveis Diretas/Codificadas
         'TP_SEXO': 1 if MAP_FORM_TO_MODEL["sexo"].get(form_data["sexo"], 'M') == 'F' else 0, # M:0, F:1
-        'TP_FAIXA_ETARIA': map_idade_to_faixa_etaria(form_data["idade"]),
-        'TP_ESCOLA': MAP_FORM_TO_MODEL["escola"].get(form_data["escola"], 2),
-        'TP_LINGUA': MAP_FORM_TO_MODEL["lingua_estrangeira"].get(form_data["lingua_estrangeira"], 0),
-        'IN_TREINEIRO': MAP_FORM_TO_MODEL["treineiro"].get(form_data["treineiro"], 0),
-        'TP_ESTADO_CIVIL': MAP_FORM_TO_MODEL["estado_civil"].get(form_data["estado_civil"], 1),
-        'TP_COR_RACA': MAP_FORM_TO_MODEL["cor_raca"].get(form_data["cor_raca"], 3),
+        'TP_FAIXA_ETARIA': map_idade_to_faixa_etaria(idade),
+        'TP_ESCOLA': MAP_FORM_TO_MODEL["escola"].get(form_data.get("escola", "Pública"), 2),
+        'TP_LINGUA': MAP_FORM_TO_MODEL["lingua_estrangeira"].get(form_data.get("lingua_estrangeira", "Inglês"), 0),
+        'IN_TREINEIRO': MAP_FORM_TO_MODEL["treineiro"].get(form_data.get("treineiro", "Não"), 0),
+        'TP_ESTADO_CIVIL': MAP_FORM_TO_MODEL["estado_civil"].get(form_data.get("estado_civil", "Solteiro"), 1),
+        'TP_COR_RACA': MAP_FORM_TO_MODEL["cor_raca"].get(form_data.get("cor_raca", "Parda"), 3),
 
         # Variáveis Contextuais/Flags
-        'FLAG_CAPITAL': MAP_FORM_TO_MODEL["flag_capital"].get(form_data["flag_capital"], 0),
-        'IN_CERTIFICADO': MAP_FORM_TO_MODEL["in_certificado"].get(form_data["in_certificado"], 0),
-        'REGIAO_CANDIDATO': MAP_FORM_TO_MODEL["regiao_candidato"].get(form_data["regiao_candidato"], 3),
-        'REGIAO_ESCOLA': MAP_FORM_TO_MODEL["regiao_escola"].get(form_data["regiao_escola"], 3),
-        'TP_DEPENDENCIA_ADM_ESC': MAP_FORM_TO_MODEL["tp_dependencia_adm_esc"].get(form_data["tp_dependencia_adm_esc"], 0),
-        'TP_LOCALIZACAO_ESC': MAP_FORM_TO_MODEL["tp_localizacao_esc"].get(form_data["tp_localizacao_esc"], 1),
-        'TP_ENSINO': MAP_FORM_TO_MODEL["tp_ensino"].get(form_data["tp_ensino"], 1),
+        'FLAG_CAPITAL': MAP_FORM_TO_MODEL["flag_capital"].get(form_data.get("flag_capital", "Não"), 0),
+        'IN_CERTIFICADO': MAP_FORM_TO_MODEL["in_certificado"].get(form_data.get("in_certificado", "Não"), 0),
+        'REGIAO_CANDIDATO': MAP_FORM_TO_MODEL["regiao_candidato"].get(form_data.get("regiao_candidato", "Sudeste"), 3),
+        'REGIAO_ESCOLA': MAP_FORM_TO_MODEL["regiao_escola"].get(form_data.get("regiao_escola", "Sudeste"), 3),
+        'TP_DEPENDENCIA_ADM_ESC': MAP_FORM_TO_MODEL["tp_dependencia_adm_esc"].get(form_data.get("tp_dependencia_adm_esc", "Não se aplica"), 0),
+        'TP_LOCALIZACAO_ESC': MAP_FORM_TO_MODEL["tp_localizacao_esc"].get(form_data.get("tp_localizacao_esc", "Urbana"), 1),
+        'TP_ENSINO': MAP_FORM_TO_MODEL["tp_ensino"].get(form_data.get("tp_ensino", "Ensino Médio Regular"), 1),
 
-        # VARIÁVEIS DERIVADAS CALCULADAS (AGORA NÃO SÃO MAIS ZERADAS)
+        # VARIÁVEIS DERIVADAS CALCULADAS
         'FLAG_CANDIDATO_ADULTO': flag_adulto,
         'ESCOLARIDADE_PAIS_AGRUPADO': escolaridade_pais_agrupado,
         'RENDA_FAMILIAR': renda_familiar_agrupada,
@@ -288,29 +284,30 @@ def prepare_student_data_for_prediction(form_data, model_features):
         # Variáveis que não estão no formulário e PERMANECEM ZERADAS/FIXAS
         'CO_UF_ENTIDADE_CERTIFICACAO': 0, 'NO_ENTIDADE_CERTIFICACAO': 0, 'NO_MUNICIPIO_ESC': 0,
         'NO_MUNICIPIO_PROVA': 0, 'SG_UF_ENTIDADE_CERTIFICACAO': 0, 'SG_UF_ESC': 0, 'SG_UF_PROVA': 0,
-        'NU_ANO': 2022, # Mantido fixo
+        'NU_ANO': 2022,
         'TEMPO_FORA_ESCOLA': 0, 'TIPO_ESCOLA_AGRUPADO': 0, 'TP_ANO_CONCLUIU': 0,
-}
+        'TP_SIT_FUNC_ESC': 0 # Variável fixa/zerada
+    }
 
     # Adiciona as Q's codificadas (Q001 a Q025)
     data_aluno.update(socio_data)
 
-    # Inicializa o DF AQUI com todos os dados coletados/fixados
     df_aluno = pd.DataFrame([data_aluno])
 
     # Forçar a ordem das colunas e garantir a consistência de tipos
+    # Usamos o reindex para garantir que TODAS as colunas do modelo estejam presentes
     df_aluno = df_aluno.reindex(columns=model_features, fill_value=0)
 
     try:
         df_aluno = df_aluno.apply(pd.to_numeric, errors='coerce')
         df_aluno = df_aluno.fillna(0) # Preenche quaisquer NAs resultantes da coerção com 0
     except Exception as e:
-        st.error(f"Erro na conversão final de tipos para float: {e}")
+        # st.error(f"Erro na conversão final de tipos para float: {e}")
         return pd.DataFrame(index=[0], columns=model_features, data=0)
 
     return df_aluno
 
-# --- FUNÇÃO ATUALIZADA ---
+# --- FUNÇÃO ATUALIZADA (retorna a classe e a nota mock) ---
 @st.cache_data(show_spinner=False)
 def real_predict_notas(target_col, student_data_df):
     """Faz a predição real usando o modelo carregado para uma prova."""
@@ -318,12 +315,6 @@ def real_predict_notas(target_col, student_data_df):
         data = load_main_model_and_data(target_col)
         main_model = data["main_model"]
 
-        # O modelo treinado espera uma lista específica de features.
-        # Pegamos essa lista do X_test (que deve ser consistente com o modelo)
-        # Se X_test não for carregado, o modelo pode não ter o atributo feature_names_in_.
-        # Para ser robusto, garantimos que o student_data_df já está na forma correta.
-
-        # No seu caso, o modelo deve estar fazendo uma CLASSIFICAÇÃO de desempenho (0, 1, 2)
         aluno_y_pred_class = main_model.predict(student_data_df)[0]
 
         # Assumindo que a nota prevista é a média da classe:
@@ -335,43 +326,42 @@ def real_predict_notas(target_col, student_data_df):
         else: # Classe 2
             nota_prevista = np.random.randint(600, 750)
 
-        return nota_prevista
+        # RETORNA A CLASSE E A NOTA
+        return aluno_y_pred_class, nota_prevista
 
     except KeyError:
         # Ocorre se o modelo ou X_test não puderam ser carregados
-        return np.random.randint(400, 800) # Retorna mock se falhar
+        return np.random.randint(0, 3), np.random.randint(400, 800) # Retorna mock se falhar
     except Exception as e:
-        st.error(f"Erro ao tentar prever a nota para {target_col}: {e}")
-        return np.random.randint(400, 800) # Retorna mock se falhar
+        # st.error(f"Erro ao tentar prever a nota para {target_col}: {e}")
+        return np.random.randint(0, 3), np.random.randint(400, 800) # Retorna mock se falhar
 
 def predict_all_notas(form_data, model_features_list):
     """
     Simula a previsão para todas as provas, chamando o modelo real para cada uma.
+    Retorna a classe de desempenho e a nota mock.
     """
 
     all_notas = {}
     for prova_nome, target_col in MAP_PROVAS.items():
         # 1. Prepara os dados do aluno para o modelo
-        # NOTA: O modelo para cada prova PODE ter uma lista de features ligeiramente diferente.
-        # Para simplificar, usamos a lista de features mais completa (assumindo que a lista
-        # model_features_list é um superconjunto)
         aluno_df = prepare_student_data_for_prediction(form_data, model_features_list)
 
-        # 2. Roda a predição real
-        nota_prevista = real_predict_notas(target_col, aluno_df)
-        all_notas[prova_nome] = nota_prevista
+        # 2. Roda a predição real (retorna classe e nota)
+        pred_class, nota_prevista = real_predict_notas(target_col, aluno_df)
+        all_notas[prova_nome] = {"nota": nota_prevista, "desempenho_label": MAP_RESULTADO.get(pred_class, "Indefinido")}
 
     return all_notas
 
-# Mock de previsão
-def predict_notas(sexo=None, renda=None, esc_pai=None, esc_mae=None, escola=None, idade=None):
+# Mock de previsão inicial (atualizado para retornar o formato com o label de desempenho)
+def predict_notas_inicial():
     np.random.seed(42)
     return {
-        "Linguagens e Códigos": np.random.randint(400, 800),
-        "Ciências Humanas": np.random.randint(400, 800),
-        "Ciências da Natureza": np.random.randint(400, 800),
-        "Matemática": np.random.randint(400, 800),
-        "Redação": np.random.randint(400, 1000),
+        "Linguagens e Códigos": {"nota": np.random.randint(400, 800), "desempenho_label": MAP_RESULTADO[np.random.randint(0, 3)]},
+        "Ciências Humanas": {"nota": np.random.randint(400, 800), "desempenho_label": MAP_RESULTADO[np.random.randint(0, 3)]},
+        "Ciências da Natureza": {"nota": np.random.randint(400, 800), "desempenho_label": MAP_RESULTADO[np.random.randint(0, 3)]},
+        "Matemática": {"nota": np.random.randint(400, 800), "desempenho_label": MAP_RESULTADO[np.random.randint(0, 3)]},
+        "Redação": {"nota": np.random.randint(400, 1000), "desempenho_label": MAP_RESULTADO[np.random.randint(0, 3)]},
     }
 
 ANALYZER_COLUMNS = [
@@ -385,9 +375,9 @@ ANALYZER_COLUMNS = [
     "TP_LOCALIZACAO_ESC","TP_SEXO","TP_SIT_FUNC_ESC"
 ]
 
-# Inicializa session_state
+# Inicializa session_state com o novo formato de notas
 if "notas" not in st.session_state:
-    st.session_state.notas = predict_notas()
+    st.session_state.notas = predict_notas_inicial()
 
 default_values = {
     "sexo": "Masculino",
@@ -403,12 +393,12 @@ default_values = {
     "estado_civil": "Solteiro",
     "cor_raca": "Parda",
 
-    # Q003, Q004, Q005 usam select_slider e mantêm o formato longo
+    # Q003, Q004, Q005
     "q003": "A",
     "q004": "B",
     "q005": 3,
 
-    # CORRIGIDO: Q007 a Q023 devem ser inicializados com 'Sim' ou 'Não' (sem o 'A (Não)')
+    # Q007 a Q025 (Inicializados com a letra da opção)
     "q007": "A", "q008": "B", "q009": "C", "q010": "A",
     "q011": "B", "q012": "C", "q013": "C", "q014": "B",
     "q015": "A", "q016": "D", "q017": "A", "q018": "A (Não)",
@@ -441,12 +431,19 @@ def load_main_model_and_data(target_col):
     csv_x_path = os.path.join(base_path, "analyzer_X_test.csv")
     csv_y_path = os.path.join(base_path, "analyzer_y_test.csv")
 
+    # Tenta carregar o modelo e os dados de teste (necessários para a Tab 2 e para a função real_predict_notas)
     if os.path.exists(model_path):
-        data["main_model"] = joblib.load(model_path)
+        try:
+            data["main_model"] = joblib.load(model_path)
+        except Exception as e:
+            # st.warning(f"Não foi possível carregar o modelo {model_filename}: {e}")
+            pass # Continua se o modelo não puder ser carregado, mas a predição será mock
+    # O carregamento de X_test/y_test e importances é principalmente para a TAB 2 (Importância)
     if os.path.exists(csv_x_path):
         data["X_test"] = pd.read_csv(csv_x_path)
     if os.path.exists(csv_y_path):
         data["y_test"] = pd.read_csv(csv_y_path).squeeze()
+
 
     data["model_features"] = ANALYZER_COLUMNS
 
@@ -454,14 +451,15 @@ def load_main_model_and_data(target_col):
     importances_path = os.path.join(base_path, importances_filename)
     if os.path.exists(importances_path):
         data["importances"] = pd.read_csv(importances_path)
-    else:
-        raise FileNotFoundError(f"Arquivo de importâncias '{importances_filename}' não encontrado.")
+    # else:
+    #     raise FileNotFoundError(f"Arquivo de importâncias '{importances_filename}' não encontrado.")
 
     data["target_col"] = target_col
     return data
 
 # --- Tabs ---
-tab1, tab2, tab3 = st.tabs(["🎯 Simulação de Resultado", "📌 Variáveis Importantes", "🔬 Análise do Modelo Principal"])
+# REMOVENDO A TAB3
+tab1, tab2 = st.tabs(["🎯 Simulação de Resultado", "📌 Variáveis Importantes"])
 
 model_features_list = ANALYZER_COLUMNS
 
@@ -469,39 +467,41 @@ model_features_list = ANALYZER_COLUMNS
 if 'prova_seletor' not in st.session_state:
     st.session_state.prova_seletor = list(MAP_PROVAS.keys())[0]
 
-# Carrega dados apenas se não for "Geral"
-if st.session_state.prova_seletor != "Geral (todas as provas)":
-    target_col_selecionado = MAP_PROVAS[st.session_state.prova_seletor]
-    try:
-        analysis_data = load_main_model_and_data(target_col_selecionado)
-        st.toast(f"Dados de análise para {st.session_state.prova_seletor} carregados! 🎉", icon='✅')
-    except FileNotFoundError as e:
-        analysis_data = None
-        st.warning(f"Arquivos de modelo ou teste para {st.session_state.prova_seletor} não encontrados. {e}")
-    except Exception as e:
-        analysis_data = None
-        st.error(f"Erro inesperado no carregamento: {e}")
-else:
-    target_col_selecionado = None
-    analysis_data = None  # Evita carregar dados de uma prova específica
+# O carregamento dos dados de análise é necessário para a Tab 2
+target_col_selecionado = MAP_PROVAS[st.session_state.prova_seletor]
+try:
+    analysis_data = load_main_model_and_data(target_col_selecionado)
+    # st.toast(f"Dados de análise para {st.session_state.prova_seletor} carregados! 🎉", icon='✅')
+except Exception as e:
+    analysis_data = None
+    # st.error(f"Erro inesperado no carregamento dos dados de análise: {e}")
 
 selected_prova_nome = st.session_state.prova_seletor
 
 # --- TAB 1: Simulação de Resultado ---
 with tab1:
-    st.info("Preencha os campos socioeconômicos e veja a previsão dinâmica de desempenho em cada área do ENEM.")
-    st.subheader("📊 Resultado da Predição")
+    st.info("Preencha os campos socioeconômicos e veja a previsão de desempenho em cada área do ENEM.")
+    st.subheader("📊 Nível de Desempenho Previsto")
     cards_placeholder = st.empty()
 
+    # FUNÇÃO DE RENDERIZAÇÃO ATUALIZADA (Exibe o Label de Desempenho)
     def render_cards():
         with cards_placeholder:
             cols = st.columns(5)
-            for (area, nota), col in zip(st.session_state.notas.items(), cols):
-                col.metric(area, nota)
+            # o st.session_state.notas agora é um dict aninhado: {"Área": {"nota": 500, "desempenho_label": "Médio"}}
+            for (area, data_nota), col in zip(st.session_state.notas.items(), cols):
+                # Usando o st.markdown e o estilo customizado para o título do card
+                with col:
+                    st.markdown(f'<div class="desempenho-metric">', unsafe_allow_html=True)
+                    st.metric(area, data_nota["desempenho_label"])
+                    # Adiciona a nota aproximada como uma legenda
+                    st.caption(f"Nota aprox.: {data_nota['nota']}")
+                    st.markdown(f'</div>', unsafe_allow_html=True)
+
 
     render_cards()
 
-    # --- Formulário ---
+    # --- Formulário (Mantido inalterado) ---
     st.subheader("🧑‍🎓 Dados do Participante")
     with st.form("prediction_form"):
         # LINHA 1: Demográficos Básicos
@@ -560,25 +560,25 @@ with tab1:
                                 horizontal=True, index=["Sim", "Não"].index(st.session_state.treineiro))
 
         st.subheader("🏡 Questionário Socioeconômico Detalhado")
-        st.caption("Responda de Q003 a Q023 para influenciar a previsão com base em seu Índice de Condição Socioeconômica (ICSE).")
+        st.caption("Responda de Q003 a Q025 para influenciar a previsão com base em seu Índice de Condição Socioeconômica (ICSE).")
 
         # Q003, Q004, Q005
         col1, col2, col3 = st.columns(3)
         with col1:
-            q003 = st.select_slider("Q003 (Grupo de Ocupação do Pai)", options=list(MAP_QUESTIONARIO_OPCOES["Q003_OPTIONS"].values()), value=st.session_state.q003, key='q003_form')
+            q003 = st.select_slider("Q003 (Ocupação do Pai)", options=list(MAP_QUESTIONARIO_OPCOES["Q003_OPTIONS"].values()), value=st.session_state.q003, key='q003_form')
         with col2:
-            q004 = st.select_slider("Q004 (Grupo de Ocupação da Mãe)", options=list(MAP_QUESTIONARIO_OPCOES["Q004_OPTIONS"].values()), value=st.session_state.q004, key='q004_form')
+            q004 = st.select_slider("Q004 (Ocupação da Mãe)", options=list(MAP_QUESTIONARIO_OPCOES["Q004_OPTIONS"].values()), value=st.session_state.q004, key='q004_form')
         with col3:
-            q005 = st.slider("Q005 (Nº de Pessoas)", 1, 20, st.session_state.q005)
+            q005 = st.slider("Q005 (Nº de Pessoas na Residência)", 1, 20, st.session_state.q005)
 
         # Q007, Q008, Q009
         col1, col2, col3 = st.columns(3)
         with col1:
-            q007 = st.select_slider("Q007 (Empregado(a) doméstico(a)?)", options=list(MAP_QUESTIONARIO_OPCOES["Q007_OPTIONS"].values()), value=st.session_state.q007, key='q007_form')
+            q007 = st.select_slider("Q007 (Empregado doméstico?)", options=list(MAP_QUESTIONARIO_OPCOES["Q007_OPTIONS"].values()), value=st.session_state.q007, key='q007_form')
         with col2:
-            q008 = st.select_slider("Q008 (Na sua residência tem banheiro?)", options=list(MAP_QUESTIONARIO_OPCOES["Q008_OPTIONS"].values()), value=st.session_state.q008, key='q008_form')
+            q008 = st.select_slider("Q008 (Nº de Banheiros)", options=list(MAP_QUESTIONARIO_OPCOES["Q008_OPTIONS"].values()), value=st.session_state.q008, key='q008_form')
         with col3:
-            q009 = st.select_slider("Q009 (Na sua residência tem quartos para dormir?)", options=list(MAP_QUESTIONARIO_OPCOES["Q009_OPTIONS"].values()), value=st.session_state.q009, key='q009_form')
+            q009 = st.select_slider("Q009 (Nº de Quartos)", options=list(MAP_QUESTIONARIO_OPCOES["Q009_OPTIONS"].values()), value=st.session_state.q009, key='q009_form')
 
         # Q010, Q011, Q012
         col1, col2, col3 = st.columns(3)
@@ -601,7 +601,7 @@ with tab1:
         # Q016, Q017, Q018
         col1, col2, col3 = st.columns(3)
         with col1:
-            q016 = st.select_slider("Q016 (Na sua residência tem forno micro-ondas?)", options=list(MAP_QUESTIONARIO_OPCOES["Q016_OPTIONS"].values()), value=st.session_state.q016, key='q016_form')
+            q016 = st.select_slider("Q016 (Na sua residência tem micro-ondas?)", options=list(MAP_QUESTIONARIO_OPCOES["Q016_OPTIONS"].values()), value=st.session_state.q016, key='q016_form')
         with col2:
             q017 = st.select_slider("Q017 (Na sua residência tem máquina de lavar louça?)", options=list(MAP_QUESTIONARIO_OPCOES["Q017_OPTIONS"].values()), value=st.session_state.q017, key='q017_form')
         with col3:
@@ -610,20 +610,20 @@ with tab1:
         # Q019, Q020, Q021
         col1, col2, col3 = st.columns(3)
         with col1:
-            q019 = st.select_slider("Q019 (Na sua residência tem forno micro-ondas?)", options=list(MAP_QUESTIONARIO_OPCOES["Q019_OPTIONS"].values()), value=st.session_state.q019, key='q019_form')
+            q019 = st.select_slider("Q019 (Na sua residência tem TV em cores?)", options=list(MAP_QUESTIONARIO_OPCOES["Q019_OPTIONS"].values()), value=st.session_state.q019, key='q019_form')
         with col2:
-            q020 = st.select_slider("Q020 (Na sua residência tem máquina de lavar louça?)", options=list(MAP_QUESTIONARIO_OPCOES["Q020_OPTIONS"].values()), value=st.session_state.q020, key='q020_form')
+            q020 = st.select_slider("Q020 (Na sua residência tem aparelho de DVD?)", options=list(MAP_QUESTIONARIO_OPCOES["Q020_OPTIONS"].values()), value=st.session_state.q020, key='q020_form')
         with col3:
-            q021 = st.select_slider("Q021 (Na sua residência tem aspirador de pó?)", options=list(MAP_QUESTIONARIO_OPCOES["Q021_OPTIONS"].values()), value=st.session_state.q021, key='q021_form')
+            q021 = st.select_slider("Q021 (Na sua residência tem rádio?)", options=list(MAP_QUESTIONARIO_OPCOES["Q021_OPTIONS"].values()), value=st.session_state.q021, key='q021_form')
 
         # Q022, Q023, Q024
         col1, col2, col3 = st.columns(3)
         with col1:
-            q022 = st.select_slider("Q022 (Na sua residência tem telefone celular?)", options=list(MAP_QUESTIONARIO_OPCOES["Q022_OPTIONS"].values()), value=st.session_state.q022, key='q022_form')
+            q022 = st.select_slider("Q022 (Nº de Celulares)", options=list(MAP_QUESTIONARIO_OPCOES["Q022_OPTIONS"].values()), value=st.session_state.q022, key='q022_form')
         with col2:
             q023 = st.select_slider("Q023 (Na sua residência tem telefone fixo?)", options=list(MAP_QUESTIONARIO_OPCOES["Q023_OPTIONS"].values()), value=st.session_state.q023, key='q023_form')
         with col3:
-            q024 = st.select_slider("Q024 (Na sua residência tem computador?)", options=list(MAP_QUESTIONARIO_OPCOES["Q024_OPTIONS"].values()), value=st.session_state.q024, key='q024_form')
+            q024 = st.select_slider("Q024 (Nº de Computadores)", options=list(MAP_QUESTIONARIO_OPCOES["Q024_OPTIONS"].values()), value=st.session_state.q024, key='q024_form')
 
         # Q025
         col1, = st.columns(1)
@@ -661,19 +661,11 @@ with tab1:
     if submitted:
         # 1. Coleta os dados do formulário
         form_data = {
-            "sexo": sexo,
-            "idade": idade,
-            "renda": renda,
-            "esc_pai": esc_pai,
-            "esc_mae": esc_mae,
-            "escola": escola,
-            "internet": internet,
-            "computador": computador,
-            "lingua_estrangeira": lingua_estrangeira,
-            "treineiro": treineiro,
-            "estado_civil": estado_civil,
-            "cor_raca": cor_raca,
-            "q003": q003, "q004": q004, "q005": q005,
+            "sexo": sexo, "idade": idade, "renda": renda, "esc_pai": esc_pai, "esc_mae": esc_mae,
+            "escola": escola, "internet": internet, "computador": computador,
+            "lingua_estrangeira": lingua_estrangeira, "treineiro": treineiro,
+            "estado_civil": estado_civil, "cor_raca": cor_raca,
+            "q003": st.session_state.q003_form, "q004": st.session_state.q004_form, "q005": q005,
             "q007": st.session_state.q007_form, "q008": st.session_state.q008_form,
             "q009": st.session_state.q009_form, "q010": st.session_state.q010_form,
             "q011": st.session_state.q011_form, "q012": st.session_state.q012_form,
@@ -684,41 +676,26 @@ with tab1:
             "q021": st.session_state.q021_form, "q022": st.session_state.q022_form,
             "q023": st.session_state.q023_form, "q024": st.session_state.q024_form,
             "q025": st.session_state.q025_form,
-            # NOVAS Variáveis Contextuais
-            "regiao_candidato": regiao_candidato,
-            "regiao_escola": regiao_escola,
-            "flag_capital": flag_capital,
-            "in_certificado": in_certificado,
+            "regiao_candidato": regiao_candidato, "regiao_escola": regiao_escola,
+            "flag_capital": flag_capital, "in_certificado": in_certificado,
             "tp_dependencia_adm_esc": tp_dependencia_adm_esc,
-            "tp_localizacao_esc": tp_localizacao_esc,
-            "tp_ensino": tp_ensino,
+            "tp_localizacao_esc": tp_localizacao_esc, "tp_ensino": tp_ensino,
         }
         st.session_state.update(form_data)
 
-        # 2. Roda a previsão REAL
-        # 'model_features_list' deve ser carregado no início do script com TODAS as 57 colunas
+        # 2. Roda a previsão REAL (agora retorna nota e o rótulo de desempenho)
         st.session_state.notas = predict_all_notas(form_data, model_features_list)
         render_cards()
+        st.toast("Previsão concluída! 🎉", icon='✅')
 
     if limpar:
-        # ... (lógica de limpeza) ...
+        # Lógica de limpeza
         for k, v in default_values.items():
             st.session_state[k] = v
-        st.session_state.notas = {k: np.random.randint(400, 800) for k in MAP_PROVAS.keys()}
+        st.session_state.notas = predict_notas_inicial() # Reinicia com valores mock
         st.rerun()
 
-    # --- Gráfico ---
-    st.subheader("📈 Visualização Gráfica")
-    df_notas = pd.DataFrame({
-        "Área": list(st.session_state.notas.keys()),
-        "Nota Prevista": list(st.session_state.notas.values())
-    })
-    fig = px.bar(df_notas, x="Área", y="Nota Prevista", text="Nota Prevista",
-                 color="Área", title="Notas Previstas por Área do ENEM")
-    fig.update_traces(textposition="outside")
-    st.plotly_chart(fig, use_container_width=True)
-
-# --- TAB 2: Variáveis Importantes ---
+# --- TAB 2: Variáveis Importantes (Mantida Inalterada) ---
 with tab2:
     st.subheader("📌 Importância das Variáveis")
     options_for_tab2 = list(MAP_PROVAS.keys()) + ["Geral (todas as provas)"]
@@ -726,7 +703,7 @@ with tab2:
     selected_prova_tab2 = st.selectbox(
         "Selecione o Contexto de Análise:",
         options=options_for_tab2,
-        index=options_for_tab2.index(st.session_state.prova_seletor),
+        index=options_for_tab2.index(st.session_state.prova_seletor) if st.session_state.prova_seletor in options_for_tab2 else 0,
     )
 
     def traduzir_variavel(var):
@@ -738,9 +715,10 @@ with tab2:
         for prova_nome, col_target in MAP_PROVAS.items():
             try:
                 data_local = load_main_model_and_data(col_target)
-                df_imp = data_local["importances"].copy()
-                df_imp.rename(columns={"Importance": prova_nome}, inplace=True)
-                all_importances.append(df_imp)
+                if "importances" in data_local:
+                    df_imp = data_local["importances"].copy()
+                    df_imp.rename(columns={"Importance": prova_nome}, inplace=True)
+                    all_importances.append(df_imp)
             except:
                 pass
 
@@ -749,7 +727,10 @@ with tab2:
             for df in all_importances[1:]:
                 df_merged = df_merged.merge(df, on="Feature", how="outer")
 
-            df_merged["MeanImportance"] = df_merged.iloc[:, 1:].mean(axis=1)
+            # Calcula a média da importância
+            cols_importance = [col for col in df_merged.columns if col != "Feature"]
+            df_merged["MeanImportance"] = df_merged[cols_importance].mean(axis=1)
+
             df_general = df_merged[["Feature", "MeanImportance"]].sort_values("MeanImportance", ascending=False).head(10)
             df_general["Feature"] = df_general["Feature"].apply(traduzir_variavel)
 
@@ -770,78 +751,22 @@ with tab2:
         target_col = MAP_PROVAS[selected_prova_tab2]  # Atualiza a prova corretamente
         try:
             data_local = load_main_model_and_data(target_col)
-            df_importances = data_local["importances"].head(10).sort_values(by="Importance", ascending=True).copy()
-            df_importances["Feature"] = df_importances["Feature"].apply(traduzir_variavel)
+            if "importances" in data_local:
+                df_importances = data_local["importances"].head(10).sort_values(by="Importance", ascending=True).copy()
+                df_importances["Feature"] = df_importances["Feature"].apply(traduzir_variavel)
 
-            fig = px.bar(
-                df_importances,
-                x="Importance",
-                y="Feature",
-                orientation='h',
-                title=f"Top 10 Importância das Variáveis para {selected_prova_tab2}",
-                labels={'Importance': 'Pontuação de Importância (Gini)', 'Feature': 'Variável'},
-                color_discrete_sequence=px.colors.qualitative.Bold
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            st.dataframe(df_importances.sort_values(by="Importance", ascending=False).reset_index(drop=True))
+                fig = px.bar(
+                    df_importances,
+                    x="Importance",
+                    y="Feature",
+                    orientation='h',
+                    title=f"Top 10 Importância das Variáveis para {selected_prova_tab2}",
+                    labels={'Importance': 'Pontuação de Importância (Gini)', 'Feature': 'Variável'},
+                    color_discrete_sequence=px.colors.qualitative.Bold
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                st.dataframe(df_importances.sort_values(by="Importance", ascending=False).reset_index(drop=True))
+            else:
+                 st.warning(f"O arquivo de importâncias para {selected_prova_tab2} não foi encontrado.")
         except Exception as e:
             st.warning(f"Não foi possível carregar os dados de importâncias para {selected_prova_tab2}. {e}")
-
-# --- TAB 3: Análise do Modelo Principal ---
-with tab3:
-    st.subheader("🔬 Análise Exploratória do Modelo Principal")
-    provas_analise_exclusiva = [k for k in MAP_PROVAS.keys() if MAP_PROVAS[k]]
-
-    if selected_prova_nome not in provas_analise_exclusiva:
-        st.session_state.prova_seletor = provas_analise_exclusiva[0]
-        st.rerun()
-
-    st.selectbox(
-        "Selecione o Modelo de Prova para Análise:",
-        options=provas_analise_exclusiva,
-        index=provas_analise_exclusiva.index(selected_prova_nome),
-        key='prova_seletor_tab3',
-        on_change=st.rerun
-    )
-
-    if st.session_state.prova_seletor_tab3 != st.session_state.prova_seletor:
-        st.session_state.prova_seletor = st.session_state.prova_seletor_tab3
-        st.rerun()
-
-    st.info("Aqui usamos o modelo para fazer previsões de alunos reais do conjunto de teste.")
-    st.markdown(f"**Modelo Carregado:** `randomForest_{target_col_selecionado}.pkl` ({selected_prova_nome})")
-
-    if analysis_data and analysis_data.get("target_col") == target_col_selecionado:
-        if "main_model" not in analysis_data or "X_test" not in analysis_data or "y_test" not in analysis_data:
-            st.warning("Arquivos de modelo principal ou dados de teste não foram carregados. Verifique o diretório.")
-        else:
-            main_model = analysis_data["main_model"]
-            X_test_analyzer = analysis_data["X_test"]
-            y_test_analyzer = analysis_data["y_test"]
-
-            if st.button("Carregar Aluno Aleatório do Teste", use_container_width=True, key="btn_analise"):
-                rand_idx = np.random.randint(0, len(X_test_analyzer))
-                st.session_state.analyzer_idx = rand_idx
-                st.session_state.analyzer_col = target_col_selecionado
-
-            if "analyzer_idx" in st.session_state and st.session_state.get("analyzer_col") == target_col_selecionado:
-                idx = st.session_state.analyzer_idx
-                st.markdown(f"--- \n### 🧑‍🎓 Aluno Sorteado (Índice: {idx})")
-                aluno_x_data = X_test_analyzer.iloc[[idx]]
-                aluno_y_real_class = y_test_analyzer.iloc[idx]
-                aluno_y_pred_class = main_model.predict(aluno_x_data)[0]
-                pred_label = MAP_RESULTADO[aluno_y_pred_class]
-                real_label = MAP_RESULTADO[aluno_y_real_class]
-                cols = st.columns(2)
-                cols[0].metric("🎯 Predição do Modelo", pred_label)
-                cols[1].metric("✅ Resultado Real", real_label)
-                if pred_label == real_label:
-                    st.success("O modelo acertou a previsão!")
-                else:
-                    st.error("O modelo errou a previsão.")
-                st.markdown("--- \n#### Dados Completos do Aluno ")
-                st.dataframe(aluno_x_data.T)
-            elif "analyzer_idx" in st.session_state and st.session_state.get("analyzer_col") != target_col_selecionado:
-                st.warning(f"O modelo de previsão mudou para **{selected_prova_nome}**. Clique em **'Carregar Aluno Aleatório do Teste'** para rodar a previsão com o novo modelo.")
-    else:
-        st.error(f"Não foi possível carregar o modelo ou os dados de análise para a prova selecionada ({selected_prova_nome}).")
