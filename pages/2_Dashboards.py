@@ -840,7 +840,6 @@ if gerar_pdf:
             style.id = 'print-style-dashboard-enem';
             style.innerHTML = `
               @page {
-                /* retrato (padrão) + sem margens extras do navegador */
                 size: A4;
                 margin: 0;
               }
@@ -854,7 +853,6 @@ if gerar_pdf:
                   print-color-adjust: exact;
                 }
 
-                /* some com barra, sidebar, etc do Streamlit */
                 [data-testid="stSidebar"],
                 [data-testid="stToolbar"],
                 [data-testid="stStatusWidget"],
@@ -869,7 +867,6 @@ if gerar_pdf:
                   padding-right: 0 !important;
                 }
 
-                /* container principal do conteúdo */
                 section.main .block-container {
                   max-width: 100% !important;
                   width: 100% !important;
@@ -880,7 +877,6 @@ if gerar_pdf:
                   transform: scale(0.95);   /* se ainda cortar na direita, baixa p/ 0.9 */
                 }
 
-                /* 🔑 TRUQUE: colunas do Streamlit viram linhas na impressão */
                 [data-testid="stHorizontalBlock"] {
                   display: block !important;
                 }
@@ -891,7 +887,6 @@ if gerar_pdf:
                   width: 100% !important;
                 }
 
-                /* ajuda a evitar quebra no meio de blocos */
                 .section-title,
                 .chart-placeholder-box {
                   page-break-inside: avoid;
@@ -901,7 +896,6 @@ if gerar_pdf:
             doc.head.appendChild(style);
           }
 
-          // sobe pro topo e abre o diálogo de impressão
           parent.window.scrollTo(0, 0);
           setTimeout(function() {
             parent.window.print();
